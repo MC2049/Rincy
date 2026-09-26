@@ -1,0 +1,76 @@
+# Node.js
+node_modules/
+npm-debug.log
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+build/
+dist/
+.android/
+.ios/
+.capacitor/
+www/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs
+logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw*
+
+# Capacitor
+/web/node_modules/
+/web/platforms/
+/web/plugins/
+
+# Misc
+.DS_Store
+Thumbs.db
+
+# APKs
+*.apk
+*.aab
+
+# Gradle
+.gradle/
+/android/build/
+/android/local.properties
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# OS
+__MACOSX
+# 原始敏感数据排除（防止误提交真实 API 密钥和代理记录）
+data/settings.json.bak
+data/settings.json
+data/agents/*.json
+data/agents/*.md
+# 敏感数据完整排除（原始 Rincy）
+data/settings.json
+data/settings.json.bak
+data/agents/*.json
+data/agents/*.md
+data/agents/*.txt
+.env
+.env.*
+!.env.example
+data/settings.json.bak
+data/agents/*.json
+data/agents/*.md
+local.properties
