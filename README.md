@@ -115,17 +115,11 @@ RINCY_PORT=3080 node src/server.js
 在“设置 → 添加模型”里可以配置。所有提供商都走 OpenAI 兼容格式。
 
 | 提供商 | 接口地址 | 备注 |
-
 | :--- | :--- | :--- |
-
 | **OpenRouter** | `https://openrouter.ai/api/v1` | 一个 Key 通多家模型，有免费额度 |
-
 | **NVIDIA NIM** | `https://integrate.api.nvidia.com/v1` | 免费额度充足，需申请权限 |
-
 | **阿里云百炼（千问）** | `https://dashscope.aliyuncs.com/compatible-mode/v1` | 新用户 100 万 Tokens 免费额度 |
-
 | **智谱 AI（Z.ai）** | `https://open.bigmodel.cn/api/paas/v4` | GLM-4.7-Flash 免费 |
-
 | **Ollama（本地）** | `http://127.0.0.1:11434` | 完全本地，不需要联网 |
 
 也支持手动填入任何 OpenAI 兼容的接口地址。
