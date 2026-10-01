@@ -13,6 +13,10 @@ const DATA_DIR = path.join(__dirname, '..', 'data');
 const AGENTS_DIR = path.join(DATA_DIR, 'agents');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
+// 首次运行兜底：git clone 后没有 data/ 目录，先建好 data/ 与 data/agents/（模块加载即生效）
+fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(AGENTS_DIR, { recursive: true });
+
 // ---------------------------------------------------------------
 // 参数表（调试屏滑块）：每个滑块一一对应一个参数。
 // api: true = 这个参数直接发给模型接口（temperature / max_tokens / top_p / frequency_penalty）
@@ -328,6 +332,7 @@ function writeSettings(patch) {
   const next = { theme: cur.theme, models: cur.models };
   if (patch && patch.theme) next.theme = { ...cur.theme, ...patch.theme };
   if (Array.isArray(patch?.models)) next.models = patch.models;
+  fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2), 'utf8');
   return next;
 }

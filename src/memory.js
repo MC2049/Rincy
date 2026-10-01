@@ -103,6 +103,7 @@ function rebuildMemory(agentDir, meta) {
 
   const md = lines.join('\n') + '\n';
   try {
+    fs.mkdirSync(agentDir, { recursive: true });
     fs.writeFileSync(path.join(agentDir, 'memory.md'), md, 'utf8');
   } catch (e) {
     console.error('[memory] memory.md 写入失败（不影响回复）：', e.message);
