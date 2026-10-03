@@ -364,6 +364,26 @@ function deleteModel(id) {
   return keep;
 }
 
+// 修改模型：按 id 找到后合并允许改的字段（id 不变）
+function updateModel(id, patch) {
+  const s = readSettings();
+  const idx = s.models.findIndex((m) => m.id === id);
+  if (idx < 0) throw new Error('模型不存在');
+  const cur = s.models[idx];
+  const next = {
+    id: cur.id,
+    name: String(patch?.name ?? cur.name ?? '').trim(),
+    provider: patch?.provider === 'local' ? 'local' : (patch?.provider ? 'cloud' : cur.provider),
+    baseUrl: String(patch?.baseUrl ?? cur.baseUrl ?? '').trim(),
+    apiKey: String(patch?.apiKey ?? cur.apiKey ?? '').trim(),
+    model: String(patch?.model ?? cur.model ?? '').trim(),
+  };
+  if (!next.baseUrl || !next.model) throw new Error('接口地址和模型名必填');
+  s.models[idx] = next;
+  writeSettings({ models: s.models });
+  return next;
+}
+
 // 查某个智能体当前应使用的模型配置；找不到返回 null
 function getAgentModel(meta) {
   const settings = readSettings();
@@ -375,5 +395,5 @@ module.exports = {
   PARAM_DEFS, clampParams, paramsBlock,
   createAgent, readAgent, updateAgent, listAgents, agentDir,
   renderSoul, renderAgentsMd, renderIdentity,
-  readSettings, writeSettings, addModel, deleteModel, getAgentModel,
+  readSettings, writeSettings, addModel, updateModel, deleteModel, getAgentModel,
 };

@@ -304,6 +304,18 @@ const server = http.createServer(async (req, res) => {
       sendJSON(res, 200, { ok: true });
       return;
     }
+    if (mm && (req.method === 'PUT' || req.method === 'PATCH')) {
+      // 修改模型
+      let body;
+      try { body = JSON.parse(await readBody(req)); } catch { sendJSON(res, 400, { error: '请求格式不对' }); return; }
+      try {
+        const m = config.updateModel(decodeURIComponent(mm[1]), body || {});
+        sendJSON(res, 200, { ok: true, model: m });
+      } catch (e) {
+        sendJSON(res, 404, { error: e.message });
+      }
+      return;
+    }
     if (p.startsWith('/api/')) { sendJSON(res, 404, { error: '接口不存在' }); return; }
     serveStatic(res, p);
   } catch (e) {

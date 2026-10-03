@@ -461,6 +461,11 @@ function renderModelList() {
     sub.className = 'model-sub';
     sub.textContent = m.model || m.baseUrl || '';
     info.append(nm, sub);
+    const edit = document.createElement('button');
+    edit.className = 'icon-btn';
+    edit.textContent = '✎';
+    edit.title = '编辑';
+    edit.addEventListener('click', () => openEditModelDialog(m));
     const del = document.createElement('button');
     del.className = 'icon-btn';
     del.textContent = '×';
@@ -469,7 +474,7 @@ function renderModelList() {
       if (!confirm('删除这个模型？用它对话的智能体会失效。')) return;
       await modelDelete(m.id);
     });
-    row.append(info, del);
+    row.append(info, edit, del);
     box.append(row);
   }
 }
@@ -489,6 +494,19 @@ function fillModelForm({ provider, base, model, name }) {
   $('#am-base').dataset.provider = provider || 'cloud';
 }
 
+let amEditId = null; // null = 添加模式；非 null = 正在编辑的模型 id
+
+function openEditModelDialog(m) {
+  amEditId = m.id;
+  $('#add-model-dialog h3').textContent = '编辑模型';
+  $('#am-name').value = m.name || '';
+  $('#am-base').value = m.baseUrl || '';
+  $('#am-key').value = m.apiKey || '';
+  $('#am-model').value = m.model || '';
+  $('#am-base').dataset.provider = m.provider || 'cloud';
+  $('#add-model-dialog').showModal();
+}
+
 async function saveNewModel() {
   const name = $('#am-name').value.trim();
   const baseUrl = $('#am-base').value.trim();
@@ -496,11 +514,21 @@ async function saveNewModel() {
   const model = $('#am-model').value.trim();
   if (!baseUrl || !model) { alert('接口地址和模型名必填'); return; }
   const provider = $('#am-base').dataset.provider === 'local' ? 'local' : 'cloud';
-  await api('/api/models', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, provider, baseUrl, apiKey, model }),
-  });
+  if (amEditId) {
+    // 编辑已有模型
+    await api(`/api/models/${encodeURIComponent(amEditId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, provider, baseUrl, apiKey, model }),
+    });
+  } else {
+    await api('/api/models', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, provider, baseUrl, apiKey, model }),
+    });
+  }
+  amEditId = null;
   const { settings } = await api('/api/settings');
   state.settings = settings;
   renderModelList();
@@ -540,6 +568,9 @@ function bindSettingsDialog() {
 function bindAddModelDialog() {
   $('#btn-add-model').addEventListener('click', () => {
     // 打开前用当前选中的模型信息预填（默认用 NVIDIA 模板）
+    amEditId = null;
+    $('#add-model-dialog h3').textContent = '添加模型';
+    $('#am-key').value = '';
     fillModelForm({ provider: 'cloud', base: 'https://integrate.api.nvidia.com/v1', model: 'deepseek-ai/deepseek-v4-flash-0731', name: '' });
     $('#add-model-dialog').showModal();
   });
