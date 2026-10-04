@@ -391,9 +391,118 @@ function getAgentModel(meta) {
   return settings.models.find((m) => m.id === meta.model_id) || null;
 }
 
+// 导出所有智能体为 tar（不压缩）
+function importAgents() {
+
+// 从 tar 文件导入智能体
+try {
+  const tar = require('tar');
+  const fs = require('fs');
+  const path = require('path');
+
+  const agentsDir = AGENTS_DIR;
+  const tempDir = path.join(DATA_DIR, '.tmp_import_' + Date.now());
+  
+  // 创建临时目录
+  fs.mkdirSync(tempDir, { recursive: true });
+  const tarFile = path.join(tempDir, 'upload.tar');
+  
+  // 读取 tar 文件内容
+  const buffer = Buffer.from(this.buffer);
+  fs.writeFileSync(tarFile, buffer);
+
+  // 解压 tar 文件到临时目录
+  const input = fs.createReadStream(tarFile);
+  const extract = tar.x({ cwd: tempDir });
+  input.pipe(extract);
+
+  return new Promise((resolve, reject) => {
+    extract.on('end', () => {
+      // 验证是否存在 agents 目录
+      const agentsTempDir = path.join(tempDir, 'agents');
+      if (!fs.existsSync(agentsTempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        reject(new Error('Tar 文件中没有 agents 目录'));
+        return;
+      }
+
+      // 确保目标 agents 目录存在
+      fs.mkdirSync(agentsDir, { recursive: true });
+
+      // 复制智能体
+      let importedCount = 0;
+      const entries = fs.readdirSync(agentsTempDir);
+      entries.forEach(entry => {
+        const srcPath = path.join(agentsTempDir, entry);
+        const destPath = path.join(agentsDir, entry);
+        
+        if (fs.statSync(srcPath).isDirectory()) {
+          fs.cpSync(srcPath, destPath, { recursive: true });
+          importedCount++;
+        }
+      });
+
+      // 清理临时目录
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      resolve({ imported: importedCount });
+    });
+    
+    extract.on('error', reject);
+    input.on('error', reject);
+  });
+} catch (error) {
+  // 确保临时目录被清理
+  try { fs.rmSync(path.join(DATA_DIR, '.tmp_import_' + Date.now()), { recursive: true, force: true }); } catch {}
+  throw error;
+}
+
+}
+
+// 导出所有智能体为 tar（不压缩）；返回 tar 的 Buffer
+async function exportAgents() {
+  const tar = require('tar');
+  const tempDir = path.join(DATA_DIR, '.tmp_export_' + Date.now());
+  const copyDir = path.join(tempDir, 'agents');
+  fs.mkdirSync(copyDir, { recursive: true });
+  if (fs.existsSync(AGENTS_DIR)) {
+    try { fs.cpSync(AGENTS_DIR, copyDir, { recursive: true }); } catch {}
+  }
+  const tarFile = path.join(tempDir, 'agents.tar');
+  try {
+    await tar.c({ cwd: tempDir, file: tarFile, portable: true }, ['agents']);
+    return fs.readFileSync(tarFile);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+// 从 tar 导入智能体（同名覆盖，其它保留）；返回 { imported: n }
+async function importAgents(tarBuffer) {
+  const tar = require('tar');
+  const tempDir = path.join(DATA_DIR, '.tmp_import_' + Date.now());
+  fs.mkdirSync(tempDir, { recursive: true });
+  const tarFile = path.join(tempDir, 'upload.tar');
+  fs.writeFileSync(tarFile, tarBuffer);
+  try {
+    await tar.x({ cwd: tempDir, file: tarFile });
+    const importedDir = path.join(tempDir, 'agents');
+    if (!fs.existsSync(importedDir)) throw new Error('tar 包里没有 agents 目录');
+    fs.mkdirSync(AGENTS_DIR, { recursive: true });
+    let count = 0;
+    for (const entry of fs.readdirSync(importedDir)) {
+      fs.cpSync(path.join(importedDir, entry), path.join(AGENTS_DIR, entry), { recursive: true, force: true });
+      count++;
+    }
+    return { imported: count };
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 module.exports = {
+
   PARAM_DEFS, clampParams, paramsBlock,
-  createAgent, readAgent, updateAgent, listAgents, agentDir,
+  createAgent, readAgent, updateAgent, listAgents, agentDir, exportAgents, importAgents, exportAgents, importAgents,
   renderSoul, renderAgentsMd, renderIdentity,
   readSettings, writeSettings, addModel, updateModel, deleteModel, getAgentModel,
 };

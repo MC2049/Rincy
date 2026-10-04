@@ -305,6 +305,11 @@
     <div class="sett-title">模型库</div>
     <div id="model-list"></div>
     <button class="pill-btn" id="btn-add-model">＋ 添加模型</button>
+    <div style="margin-top:8px; display:flex; gap:8px;">
+      <button class="pill-btn small" id="btn-export-agents">导出智能体</button>
+      <button class="pill-btn small ghost" id="btn-import-agents">导入智能体</button>
+    </div>
+    <input type="file" id="import-agents-file" accept=".tar" style="display:none;">
   </div>
   <div class="dialog-btns">
     <button class="pill-btn small ghost" onclick="this.closest('dialog').close()">关闭</button>

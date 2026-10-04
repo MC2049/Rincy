@@ -574,6 +574,41 @@ function bindAddModelDialog() {
     fillModelForm({ provider: 'cloud', base: 'https://integrate.api.nvidia.com/v1', model: 'deepseek-ai/deepseek-v4-flash-0731', name: '' });
     $('#add-model-dialog').showModal();
   });
+  // 导出智能体（tar，不压缩）
+  $('#btn-export-agents').addEventListener('click', async () => {
+    try {
+      const base = (typeof apiBase === 'function') ? apiBase() : '';
+      const res = await fetch(base + '/api/agents/export');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const blob = await res.blob();
+      const cd = res.headers.get('content-disposition') || '';
+      const fm = cd.match(/filename="?([^";]+)"?/);
+      const fname = (fm && fm[1]) || ('rincy-agents-' + new Date().toISOString().slice(0, 10) + '.tar');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fname;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    } catch (e) { alert('导出失败：' + e.message); }
+  });
+  // 导入智能体
+  $('#btn-import-agents').addEventListener('click', () => $('#import-agents-file').click());
+  $('#import-agents-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const base = (typeof apiBase === 'function') ? apiBase() : '';
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(base + '/api/agents/import', { method: 'POST', body: fd });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || ('HTTP ' + res.status));
+      alert('导入成功：' + (json.imported || 0) + ' 个智能体');
+      location.reload();
+    } catch (err) { alert('导入失败：' + err.message); }
+    e.target.value = '';
+  });
+
   // 预置模板点击 → 填字段
   $$('#preset-row .preset-card').forEach((card) => {
     card.addEventListener('click', () => {

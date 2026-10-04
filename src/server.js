@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 const config = require('./config');
+const Busboy = require('busboy');
 const memory = require('./memory');
 const adapter = require('./model-adapter');
 
@@ -159,6 +160,38 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/params' && req.method === 'GET') {
       // 参数表（滑块渲染用）：参数名的唯一来源是 config.js，UI 只显示人话标签
       sendJSON(res, 200, { params: config.PARAM_DEFS });
+      return;
+    }
+    // ---- 智能体导入/导出（tar，不压缩）----
+    // 注意：必须放在下面的 :id 正则路由之前，否则 export/import 会被当成智能体 id
+    if (p === '/api/agents/export' && req.method === 'GET') {
+      try {
+        const buf = await config.exportAgents();
+        res.writeHead(200, {
+          'Content-Type': 'application/x-tar',
+          'Content-Disposition': 'attachment; filename="rincy-agents-' + new Date().toISOString().slice(0, 10) + '.tar"',
+          'Content-Length': buf.length,
+        });
+        res.end(buf);
+      } catch (e) { sendJSON(res, 500, { error: '导出失败：' + e.message }); }
+      return;
+    }
+    if (p === '/api/agents/import' && req.method === 'POST') {
+      const busboy = Busboy({ headers: req.headers, limits: { fileSize: 20 * 1024 * 1024 } });
+      let gotFile = false;
+      busboy.on('file', (name, file) => {
+        gotFile = true;
+        const chunks = [];
+        file.on('data', (c) => chunks.push(c));
+        file.on('end', () => {
+          config.importAgents(Buffer.concat(chunks))
+            .then((r) => sendJSON(res, 200, { ok: true, imported: r.imported }))
+            .catch((e) => sendJSON(res, 400, { error: '导入失败：' + e.message }));
+        });
+      });
+      busboy.on('finish', () => { if (!gotFile) sendJSON(res, 400, { error: '导入失败：没收到文件' }); });
+      busboy.on('error', () => sendJSON(res, 400, { error: '导入失败：文件格式不对' }));
+      req.pipe(busboy);
       return;
     }
     const m = p.match(/^\/api\/agents\/([^/]+)(\/(history|params|memory-warden|behavior|flags|catchphrases|files|clear|text-fields|model))?$/);
