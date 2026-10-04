@@ -74,3 +74,12 @@ data/settings.json.bak
 data/agents/*.json
 data/agents/*.md
 local.properties
+
+# 智能体子目录文件（agent-id 目录下的文件也要排除）
+data/agents/*/*.json
+data/agents/*/*.md
+data/agents/*/*.txt
+
+# 导入导出临时目录
+data/.tmp_export_*
+data/.tmp_import_*
