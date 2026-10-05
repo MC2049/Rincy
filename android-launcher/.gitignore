@@ -1,0 +1,7 @@
+# 构建输入（体积大，按 README 自行下载生成）
+vendor/
+termux-app/
+bootstrap-aarch64-repacked.zip
+libtermux.so
+*.apk
+.aapt2*
