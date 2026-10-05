@@ -6,8 +6,8 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Build outputs
-build/
-dist/
+/build/
+/dist/
 .android/
 .ios/
 .capacitor/
@@ -86,3 +86,6 @@ data/.tmp_import_*
 
 # 打包产物
 rincy-*.tar.gz
+
+# 打包脚本要提交（上面 /build/ 只忽略根目录构建产物）
+!scripts/build/
