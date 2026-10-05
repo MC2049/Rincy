@@ -166,10 +166,14 @@ const server = http.createServer(async (req, res) => {
     // 注意：必须放在下面的 :id 正则路由之前，否则 export/import 会被当成智能体 id
     if (p === '/api/agents/export' && req.method === 'GET') {
       try {
-        const buf = await config.exportAgents();
+        // 从 URL 解析 agentId（支持单个智能体导出）
+        const urlObj = new URL(req.url, 'http://127.0.0.1');
+        const agentId = urlObj.searchParams.get('agentId');
+        const fname = agentId ? 'rincy-agent-' + agentId + '-' + new Date().toISOString().slice(0, 10) + '.tar' : 'rincy-agents-' + new Date().toISOString().slice(0, 10) + '.tar';
+        const buf = await config.exportAgents(agentId || null);
         res.writeHead(200, {
           'Content-Type': 'application/x-tar',
-          'Content-Disposition': 'attachment; filename="rincy-agents-' + new Date().toISOString().slice(0, 10) + '.tar"',
+          'Content-Disposition': 'attachment; filename="' + fname + '"',
           'Content-Length': buf.length,
         });
         res.end(buf);

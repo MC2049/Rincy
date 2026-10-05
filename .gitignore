@@ -83,3 +83,6 @@ data/agents/*/*.txt
 # 导入导出临时目录
 data/.tmp_export_*
 data/.tmp_import_*
+
+# 打包产物
+rincy-*.tar.gz

@@ -391,9 +391,59 @@ function getAgentModel(meta) {
   return settings.models.find((m) => m.id === meta.model_id) || null;
 }
 
+
+// 导出所有智能体为 tar（不压缩）；返回 tar 的 Buffer
+async function exportAgents(agentId) {
+  const tar = require('tar');
+  const tempDir = path.join(DATA_DIR, '.tmp_export_' + Date.now());
+  fs.mkdirSync(tempDir, { recursive: true });
+  const copyDir = path.join(tempDir, 'agents');
+  fs.mkdirSync(copyDir, { recursive: true });
+  if (agentId) {
+    const srcDir = path.join(AGENTS_DIR, agentId);
+    if (fs.existsSync(srcDir)) {
+      try { fs.cpSync(srcDir, path.join(copyDir, agentId), { recursive: true }); } catch {}
+    } else {
+      throw new Error('智能体 ' + agentId + ' 不存在');
+    }
+  } else if (fs.existsSync(AGENTS_DIR)) {
+    try { fs.cpSync(AGENTS_DIR, copyDir, { recursive: true }); } catch {}
+  }
+  const tarFile = path.join(tempDir, 'agents.tar');
+  try {
+    await tar.c({ cwd: tempDir, file: tarFile, portable: true }, ['agents']);
+    return fs.readFileSync(tarFile);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+// 从 tar 导入智能体（同名覆盖，其它保留）；返回 { imported: n }
+async function importAgents(tarBuffer) {
+  const tar = require('tar');
+  const tempDir = path.join(DATA_DIR, '.tmp_import_' + Date.now());
+  fs.mkdirSync(tempDir, { recursive: true });
+  const tarFile = path.join(tempDir, 'upload.tar');
+  fs.writeFileSync(tarFile, tarBuffer);
+  try {
+    await tar.x({ cwd: tempDir, file: tarFile });
+    const importedDir = path.join(tempDir, 'agents');
+    if (!fs.existsSync(importedDir)) throw new Error('tar 包里没有 agents 目录');
+    fs.mkdirSync(AGENTS_DIR, { recursive: true });
+    let count = 0;
+    for (const entry of fs.readdirSync(importedDir)) {
+      fs.cpSync(path.join(importedDir, entry), path.join(AGENTS_DIR, entry), { recursive: true, force: true });
+      count++;
+    }
+    return { imported: count };
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 module.exports = {
   PARAM_DEFS, clampParams, paramsBlock,
-  createAgent, readAgent, updateAgent, listAgents, agentDir,
+  createAgent, readAgent, updateAgent, listAgents, agentDir, exportAgents, importAgents,
   renderSoul, renderAgentsMd, renderIdentity,
   readSettings, writeSettings, addModel, updateModel, deleteModel, getAgentModel,
 };

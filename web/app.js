@@ -81,7 +81,17 @@ function renderAgents() {
     name.className = 'agent-name';
     name.textContent = a.name;
 
-    item.append(avatar, name);
+    const expBtn = document.createElement('button');
+    expBtn.className = 'icon-btn small';
+    expBtn.style.marginLeft = 'auto';
+    expBtn.textContent = '↓';
+    expBtn.title = '导出这个智能体';
+    expBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.open('/api/agents/export?agentId=' + encodeURIComponent(a.id), '_blank');
+    });
+
+    item.append(avatar, name, expBtn);
     item.addEventListener('click', () => selectAgent(a.id).catch((e) => alert(e.message)));
     list.append(item);
   }
@@ -463,6 +473,7 @@ function renderModelList() {
     info.append(nm, sub);
     const edit = document.createElement('button');
     edit.className = 'icon-btn';
+    edit.style.marginLeft = 'auto';
     edit.textContent = '✎';
     edit.title = '编辑';
     edit.addEventListener('click', () => openEditModelDialog(m));
