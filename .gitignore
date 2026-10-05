@@ -89,3 +89,4 @@ rincy-*.tar.gz
 
 # 打包脚本要提交（上面 /build/ 只忽略根目录构建产物）
 !scripts/build/
+rincy-*.zip

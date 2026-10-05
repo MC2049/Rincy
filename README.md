@@ -256,3 +256,23 @@ MIT License
 
 *Rin Is Not Code Yet. 你不需要懂代码，就能拥有自己的智能体。*
 
+---
+
+## 发布形态：启动器（Launcher）
+
+所有 release 都以**启动器**形式发布：包里只有源码 + 启动脚本，**不含 node_modules**。
+
+| 平台 | 产物 | 用法 |
+| --- | --- | --- |
+| Linux / macOS | `rincy-launcher-v0.1.0-linux.tar.gz` | 解压后 `./start.sh` |
+| Windows | `rincy-launcher-v0.1.0-windows.zip` | 解压后双击 `start.bat`（或 `powershell -ExecutionPolicy Bypass -File start.ps1`） |
+
+首次运行会自动安装两个依赖（`busboy`、`tar`，约 4MB，**需要联网一次**），之后可完全离线使用。
+
+打包（在仓库根目录执行）：
+
+```bash
+bash scripts/build/build-linux.sh     # Linux/macOS 启动器包
+bash scripts/build/build-windows.sh   # Windows 启动器包
+bash scripts/build/build-dev.sh       # 开发/离线包（含 node_modules）
+```
