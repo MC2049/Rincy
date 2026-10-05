@@ -54,10 +54,20 @@ def _is_text(data: bytes) -> bool:
 
 
 def rewrite(data: bytes) -> bytes:
+    """只改写文本文件。
+
+    重要：`com.termux`(10) -> `com.rincy.launcher`(18) 每处长度 +8，
+    对 ELF 做等长插入会让所有后续偏移错位，.dynamic 被读花，
+    动态链接器会报 empty/missing DT_HASH/DT_GNU_HASH（dash 曾因此无法启动）。
+    二进制里的旧前缀保留不用：库路径由 LD_LIBRARY_PATH(=$PREFIX/lib) 提供。
+    """
+    if data[:4] == b'\x7fELF':          # 显式放行 ELF
+        return data
+    if not _is_text(data):
+        return data
     if OLD in data:
         data = data.replace(OLD, NEW)
-    # 短前缀（如 /data/data/com.termux/cache/...）：只改文本，避免破坏二进制
-    if OLD_SHORT in data and _is_text(data):
+    if OLD_SHORT in data:
         data = data.replace(OLD_SHORT, NEW_SHORT)
     return data
 
