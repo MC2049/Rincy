@@ -29,4 +29,6 @@
     <string name="rincy_dev_reset">重置运行环境</string>
 
     <string name="rincy_footer">Rincy 启动器 · 本机服务 127.0.0.1</string>
+    <string name="rincy_section_upgrade">升级 Rincy</string>
+    <string name="rincy_upgrade_run">执行升级</string>
 </resources>

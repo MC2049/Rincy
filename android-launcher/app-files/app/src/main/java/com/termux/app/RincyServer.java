@@ -61,17 +61,16 @@ public final class RincyServer {
 
     /** 通过 TCP 连接判断服务是否在监听。 */
     public static boolean isServing(int port) {
-        Socket socket = new Socket();
         try {
-            socket.connect(new InetSocketAddress("127.0.0.1", port), 500);
+            Socket socket = new Socket();
+            socket.connect(new InetSocketAddress("127.0.0.1", port), 1500); // 增加容忍（低端设备慢）
+            socket.close();
             return true;
         } catch (Throwable t) {
+            // 端口暂时连不上：若服务进程仍活，视为运行中（避免刚启动显示"未运行"）
+            int pid = readPid();
+            if (pid > 0 && isAlive(pid)) return true;
             return false;
-        } finally {
-            try {
-                socket.close();
-            } catch (Throwable ignored) {
-            }
         }
     }
 

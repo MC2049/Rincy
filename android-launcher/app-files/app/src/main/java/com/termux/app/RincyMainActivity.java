@@ -243,6 +243,8 @@ public class RincyMainActivity extends Activity {
         findViewById(R.id.btnRestart).setOnClickListener(v -> startServer(true));
 
         findViewById(R.id.btnResetEnv).setOnClickListener(v -> confirmReset());
+        findViewById(R.id.btnUpgrade).setOnClickListener(v -> runUpgrade());
+n        findViewById(R.id.btnUpgrade).setOnClickListener(v -> runUpgrade());
     }
 
     private void applyMode() {
@@ -459,3 +461,103 @@ public class RincyMainActivity extends Activity {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show();
     }
 }
+
+    // 升级功能：直接在源目录执行 git pull（需要设备已安装 git，且源自解包自带源码）
+    private void runUpgrade() {
+        if (working) return;
+        working = true;
+        refreshStatus();
+        final String sourceUrl = getUpgradeUrl();
+        new Thread(() -> {
+            try {
+                String cmd = sourceUrl.equals("default") ? "git pull" : "git pull " + sourceUrl + " main";
+                java.lang.ProcessBuilder pb = new java.lang.ProcessBuilder(PREFIX + "/bin/sh", "-c",
+                    "cd \"$HOME_DIR/rincy\" 2>/dev/null || cd \"$PAYLOAD/rincy\"; " + cmd);
+                pb.redirectErrorStream(true);
+                pb.environment().putAll(RincyServer.buildEnvironment(prefs.getPort()));
+                pb.environment().put("TERM", "xterm-256color");
+                java.lang.Process p = pb.start();
+                try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()))) {
+                    String line; while ((line = r.readLine()) != null) {
+                        System.out.println("[RINY-UPGRADE] " + line);
+                    }
+                }
+                p.waitFor();
+                runOnUiThread(() -> {
+                    working = false;
+                    refreshStatus();
+                    toast("升级已尝试，结果见启动日志");
+                });
+            } catch (Throwable t) {
+                runOnUiThread(() -> { working = false; refreshStatus(); toast("升级异常: " + t.getMessage()); });
+            }
+        }, "rincy-upgrade").start();
+    }
+
+    private String getUpgradeUrl() {
+        try {
+            RadioGroup group = findViewById(R.id.upgradeSourceGroup);
+            if (group != null) {
+                int id = group.getCheckedRadioButtonId();
+                if (id == R.id.upgradeGitee) return "https://gitee.com/mc2049/Rincy.git";
+                if (id == R.id.upgradeCustom) {
+                    EditText urlInput = findViewById(R.id.upgradeUrlInput);
+                    if (urlInput != null) {
+                        String s = urlInput.getText().toString().trim();
+                        if (s.startsWith("https://") || s.startsWith("http://")) return s;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return "https://github.com/mc2049/Rincy.git";
+
+    // 升级功能：直接在源目录执行 git pull（需要设备已安装 git，且源自解包自带源码）
+    private void runUpgrade() {
+        if (working) return;
+        working = true;
+        refreshStatus();
+        final String sourceUrl = getUpgradeUrl();
+        new Thread(() -> {
+            try {
+                // 优先使用设备已安装的 git
+                String cmd = sourceUrl.equals("default") ? "git pull" : "git pull " + sourceUrl + " main";
+                java.lang.ProcessBuilder pb = new java.lang.ProcessBuilder(PREFIX + "/bin/sh", "-c", 
+                    "cd "$HOME_DIR/rincy" 2>/dev/null || cd "$PAYLOAD/rincy"; " + cmd);
+                pb.redirectErrorStream(true);
+                pb.environment().putAll(RincyServer.buildEnvironment(prefs.getPort()));
+                java.lang.Process p = pb.start();
+                try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()))) {
+                    String line; while ((line = r.readLine()) != null) {
+                        System.out.println("[RINY-UPGRADE] " + line);
+                    }
+                }
+                p.waitFor();
+                runOnUiThread(() -> {
+                    working = false;
+                    refreshStatus();
+                    toast("升级已尝试，结果见启动日志");
+                });
+            } catch (Throwable t) {
+                runOnUiThread(() -> { working = false; refreshStatus(); toast("升级异常: " + t.getMessage()); });
+            }
+        }, "rincy-upgrade").start();
+    }
+
+    private String getUpgradeUrl() {
+        try {
+            RadioGroup group = findViewById(R.id.upgradeSourceGroup);
+            if (group != null) {
+                int id = group.getCheckedRadioButtonId();
+                if (id == R.id.upgradeGitee) return "https://gitee.com/mc2049/Rincy.git";
+                if (id == R.id.upgradeCustom) {
+                    EditText urlInput = findViewById(R.id.upgradeUrlInput);
+                    if (urlInput != null) {
+                        String s = urlInput.getText().toString().trim();
+                        if (s.startsWith("https://") || s.startsWith("http://")) return s;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return "https://github.com/mc2049/Rincy.git";
+    }
+    }
