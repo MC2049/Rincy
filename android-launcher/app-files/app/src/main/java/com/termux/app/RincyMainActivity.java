@@ -20,8 +20,11 @@ import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.JavascriptInterface;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -90,6 +93,7 @@ public class RincyMainActivity extends Activity {
     private int currentTab = TAB_CHAT;
     private boolean working = false;
     private int loadedPort = -1;
+    private long lastLoadAt = 0L;
 
     private static final int REQ_FILE_CHOOSER = 1001;
     private static final int REQ_STORAGE = 1002;
@@ -122,13 +126,62 @@ public class RincyMainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (webView != null) webView.onResume();
         refreshStatus();
+        // 回前台时把页面补上：WebView 可能被系统回收成白屏
+        ensureChatLoaded();
+    }
+
+    @Override
+    protected void onPause() {
+        if (webView != null) webView.onPause();
+        super.onPause();
+    }
+
+    /**
+     * launchMode=singleTask：从桌面「第二次打开」走的是 onNewIntent，不会重新 onCreate，
+     * 之前这里什么都不做，于是 WebView 一直是上次留下的空白页。
+     */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        refreshStatus();
+        ensureChatLoaded();
     }
 
     @Override
     protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
+        if (webView != null) {
+            ViewGroup parent = (webView.getParent() instanceof ViewGroup)
+                ? (ViewGroup) webView.getParent() : null;
+            if (parent != null) parent.removeView(webView);
+            try {
+                webView.destroy();
+            } catch (Throwable ignored) {
+            }
+            webView = null;
+        }
         super.onDestroy();
+    }
+
+    /** 服务在跑但页面没加载（白屏 / 端口变了 / 首次进入）时补一次加载。 */
+    private void ensureChatLoaded() {
+        if (webView == null) return;
+        int port = prefs.getPort();
+        if (!RincyServer.isServing(port)) return;
+        String want = "http://127.0.0.1:" + port + "/";
+        String current = webView.getUrl();
+        boolean wrongUrl = current == null || !current.startsWith(want);
+        // 地址对但内容高度为 0：多半是渲染进程被回收后留下的白屏。
+        // 加 3 秒保护，避免刚发起加载就被误判成白屏而重复加载。
+        boolean blank = !wrongUrl
+            && webView.getContentHeight() <= 0
+            && System.currentTimeMillis() - lastLoadAt > 3000;
+        if (wrongUrl || blank) {
+            loadChat(port);
+        }
     }
 
     @Override
@@ -232,7 +285,17 @@ public class RincyMainActivity extends Activity {
         "},true);})();";
 
     private void setupWebView() {
-        WebSettings settings = webView.getSettings();
+        webView = findViewById(R.id.webView);
+        configureWebView(webView);
+        findViewById(R.id.chatRetryButton).setOnClickListener(v -> {
+            hideChatStatus();
+            startServer(true);
+        });
+    }
+
+    /** WebView 的所有配置集中在这里，渲染进程崩溃后重建时也要复用。 */
+    private void configureWebView(WebView wv) {
+        WebSettings settings = wv.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
@@ -242,15 +305,15 @@ public class RincyMainActivity extends Activity {
         // 导入需要 WebView 能读取文件选择器返回的 content:// 与 file:// URI
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
-        webView.setBackgroundColor(getResources().getColor(R.color.rincy_bg));
+        wv.setBackgroundColor(getResources().getColor(R.color.rincy_bg));
         WebView.setWebContentsDebuggingEnabled(true);
 
         CookieManager.getInstance().setAcceptCookie(true);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true);
 
-        webView.addJavascriptInterface(new RincyNative(), "RincyNative");
+        wv.addJavascriptInterface(new RincyNative(), "RincyNative");
 
-        webView.setWebViewClient(new WebViewClient() {
+        wv.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
                 if (loadedPort > 0) hideChatStatus();
@@ -258,14 +321,28 @@ public class RincyMainActivity extends Activity {
                 view.evaluateJavascript(JS_DOWNLOAD_SHIM, null);
             }
 
+            // 只认主文档失败；子资源（favicon 等）失败不能把整页判成打不开
             @Override
-            public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-                showChatStatus("无法连接 Rincy", "服务可能还没起来，稍等或点“重试”", true);
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (request != null && request.isForMainFrame()) {
+                    showChatStatus("无法连接 Rincy", "服务可能还没起来，稍等或点“重试”", true);
+                }
+            }
+
+            // 渲染进程被系统回收：重建 WebView 并重新加载，否则页面永远白屏
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                try {
+                    rebuildWebView(view);
+                } catch (Throwable t) {
+                    toast("页面重建失败，请重开本页: " + t.getMessage());
+                }
+                return true;
             }
         });
 
         // 导入：<input type="file"> 必须由 WebChromeClient 接管，否则点击无反应
-        webView.setWebChromeClient(new WebChromeClient() {
+        wv.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
                                              FileChooserParams params) {
@@ -294,7 +371,7 @@ public class RincyMainActivity extends Activity {
         });
 
         // 导出：服务端返回附件的直接下载
-        webView.setDownloadListener(new DownloadListener() {
+        wv.setDownloadListener(new DownloadListener() {
             @Override
             public void onDownloadStart(String url, String userAgent, String contentDisposition,
                                         String mimetype, long contentLength) {
@@ -305,11 +382,32 @@ public class RincyMainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !hasStoragePermission()) {
             requestPermissions(new String[]{"android.permission.WRITE_EXTERNAL_STORAGE"}, REQ_STORAGE);
         }
+    }
 
-        findViewById(R.id.chatRetryButton).setOnClickListener(v -> {
-            hideChatStatus();
-            startServer(true);
-        });
+    /** 渲染进程崩溃后，用同位置的新 WebView 顶替旧的。 */
+    private void rebuildWebView(WebView dead) {
+        ViewGroup parent = (dead.getParent() instanceof ViewGroup) ? (ViewGroup) dead.getParent() : null;
+        int index = 0;
+        ViewGroup.LayoutParams lp = null;
+        if (parent != null) {
+            index = parent.indexOfChild(dead);
+            lp = dead.getLayoutParams();
+            parent.removeView(dead);
+        }
+        try {
+            dead.destroy();
+        } catch (Throwable ignored) {
+        }
+        WebView fresh = new WebView(this);
+        if (parent != null) {
+            parent.addView(fresh, index, lp == null ? new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT) : lp);
+        }
+        webView = fresh;
+        configureWebView(fresh);
+        loadedPort = -1;
+        showChatStatus("页面已恢复", "正在重新加载…", false);
+        ensureChatLoaded();
     }
 
     @Override
@@ -546,9 +644,20 @@ public class RincyMainActivity extends Activity {
                     showChatStatus("部署不完整", "缺少 " + RincyServer.BOOT_SCRIPT, false);
                     return;
                 }
-                if (prefs.isAutostart()) startServer(false);
-                else showChatStatus("Rincy 未启动", "点“启动”或打开自动启动", true);
+                bootAfterInstall();
             });
+            return;
+        }
+        bootAfterInstall();
+    }
+
+    private void bootAfterInstall() {
+        final int port = prefs.getPort();
+        // 服务是 setsid 脱离会话起的，上次退出后通常还在跑：直接用，别重启
+        if (RincyServer.isServing(port)) {
+            loadedPort = port;
+            loadChat(port);
+            refreshStatus();
             return;
         }
         if (prefs.isAutostart()) startServer(false);
@@ -558,12 +667,23 @@ public class RincyMainActivity extends Activity {
     private void startServer(boolean restart) {
         if (working) return;
         final int port = prefs.getPort();
+
+        // 非重启请求时，服务已经在跑就直接打开页面，避免把自己刚起的服务杀掉
+        if (!restart && RincyServer.isServing(port)) {
+            loadedPort = port;
+            loadChat(port);
+            refreshStatus();
+            return;
+        }
+
         working = true;
         refreshStatus();
         showChatStatus(restart ? "正在重启…" : "正在启动…", "端口 " + port, false);
 
         new Thread(() -> {
-            if (restart || RincyServer.isServing(port)) RincyServer.stop();
+            // 这里要么是用户要求重启，要么是检查时确实没在跑：
+            // 先清掉可能残留的旧 node 进程，避免端口被占导致新进程起不来
+            RincyServer.stop();
             String output = RincyServer.start(port);
             boolean ok = waitForPort(port, 40000);
             runOnUiThread(() -> {
@@ -613,6 +733,9 @@ public class RincyMainActivity extends Activity {
     }
 
     private void loadChat(int port) {
+        if (webView == null) return;
+        loadedPort = port;
+        lastLoadAt = System.currentTimeMillis();
         hideChatStatus();
         webView.loadUrl("http://127.0.0.1:" + port + "/");
     }
@@ -634,10 +757,9 @@ public class RincyMainActivity extends Activity {
             + (RincyServer.isInstalled() ? " · 环境已部署" : " · 环境未部署");
         statusDetail.setText(detail);
 
-        // 服务已起来但 WebView 之前加载失败时自动补一次
-        if (serving && currentTab == TAB_CHAT && chatStatusBox.getVisibility() == View.VISIBLE
-            && loadedPort != port && !working) {
-            loadedPort = port;
+        // 服务在跑但页面是空白时自动补一次（白屏自愈）
+        if (serving && currentTab == TAB_CHAT && !working && webView != null
+            && (loadedPort != port || webView.getUrl() == null)) {
             loadChat(port);
         }
     }
