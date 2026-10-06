@@ -31,7 +31,7 @@ LIBTERMUX_SO = os.environ.get("RINCY_LIBTERMUX_SO", "./libtermux.so")
 
 PKG_NAME = "com.rincy.launcher"
 APP_NAME = "Rincy"
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.2.1"
 
 log = []
 
@@ -233,7 +233,35 @@ if "import java.io.IOException;" not in text:
 if "import java.io.ByteArrayOutputStream;" not in text:
     text = text.replace("import java.io.ByteArrayInputStream;",
                         "import java.io.ByteArrayInputStream;\nimport java.io.ByteArrayOutputStream;")
+# 安装器只给 bin/、libexec 等 chmod 0700，随包的 home/rincy-boot.sh 也需要可执行位
+old_chmod = ('                                    if (zipEntryName.startsWith("bin/") || zipEntryName.startsWith("libexec") ||\n')
+new_chmod = ('                                    if (zipEntryName.startsWith("bin/") || zipEntryName.startsWith("home/") || zipEntryName.startsWith("libexec") ||\n')
+if old_chmod in text:
+    text = text.replace(old_chmod, new_chmod)
 write(installer, text)
+
+# ------------------------------- 6b. TermuxShellUtils：补齐 LD_LIBRARY_PATH 与 OPENSSL_CONF
+shell_utils = "termux-shared/src/main/java/com/termux/shared/shell/TermuxShellUtils.java"
+text = read(shell_utils)
+if "LD_LIBRARY_PATH=" not in text:
+    tmpdir_line = '            environment.add("TMPDIR=" + TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH);\n'
+    if tmpdir_line not in text:
+        raise SystemExit("[FAIL] TermuxShellUtils 的环境注入锚点已变化")
+    text = text.replace(tmpdir_line, tmpdir_line + '''            // Rincy: Termux 二进制的 DT_RUNPATH 里写死了 /data/data/com.termux/files/usr/lib，
+            // 改了包名就解析不到；设备上若装了官方 Termux，那个路径还会因跨应用访问被拒。
+            // 必须显式给出库路径（LD_LIBRARY_PATH 优先级高于 DT_RUNPATH），
+            // 否则 bash / dpkg / pkg / node 等一律报 "library ... not found"。
+            environment.add("LD_LIBRARY_PATH=" + TermuxConstants.TERMUX_LIB_PREFIX_DIR_PATH);
+            // openssl 库里编译进的 OPENSSLDIR 同样指向旧包名，指到自带的那份配置。
+            {
+                String rincyOpensslConf = TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/etc/tls/openssl.cnf";
+                if (!new java.io.File(rincyOpensslConf).exists())
+                    rincyOpensslConf = TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/etc/ssl/openssl.cnf";
+                if (new java.io.File(rincyOpensslConf).exists())
+                    environment.add("OPENSSL_CONF=" + rincyOpensslConf);
+            }
+''')
+    write(shell_utils, text)
 
 # ------------------------------------------------- 7. terminal-emulator：去 NDK，用预编译 .so
 patch("terminal-emulator/build.gradle", [

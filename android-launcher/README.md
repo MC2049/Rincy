@@ -68,6 +68,45 @@ x86_64 NDK 与 aapt2，因此改成：
 这样整条构建链不需要 NDK，只需要 JDK 11 + Android SDK（platform-30 / build-tools 30.0.3）
 \+ Gradle 7.2。
 
+## 为什么必须显式设置 LD_LIBRARY_PATH 和 OPENSSL_CONF
+
+Termux 的二进制（`bash`、`dpkg`、`node`…）在编译时把 `DT_RUNPATH` 写成了**绝对路径**
+`/data/data/com.termux/files/usr/lib`。包名改成 `com.rincy.launcher` 之后，这个 RUNPATH
+指向的目录不存在；**如果设备上装了官方 Termux，那个目录还会「存在但不可读」**（跨应用私有目录
+被拒），于是报：
+
+```
+CANNOT LINK EXECUTABLE ".../usr/bin/bash": library "libandroid-support.so" not found
+CANNOT LINK EXECUTABLE "dpkg": library "libmd.so" not found
+```
+
+`LD_LIBRARY_PATH` 的搜索优先级高于 `DT_RUNPATH`，所以必须显式给出。补丁在这三处都设置了：
+
+1. `termux-shared/.../TermuxShellUtils.setShellCommandShellEnvironment()` —— 终端会话与后台命令
+   （同时补上 `OPENSSL_CONF`）
+2. `RincyServer` 里启动脚本的 `ProcessBuilder` 环境（App 直接拉起服务时，父进程环境里没有这些）
+3. `home/rincy-boot.sh` 与 `etc/profile.d/99-rincy.sh` 自身（脚本自给自足）
+
+> ⚠️ Android 的 `linker64` **没有** `--library-path` 参数（用法只有 `linker64 program [args...]`，
+> 传了会报 `error: expected absolute path: "--library-path"`），所以「用 linker64 包装每个二进制」
+> 在 Android 10 上不可行；正确解法就是 `LD_LIBRARY_PATH`。
+
+同理，openssl 库里编译进的 `OPENSSLDIR` 也指向 `com.termux`。用 `OPENSSL_CONF` 指到自带的
+`$PREFIX/etc/tls/openssl.cnf`（Node 运行时里就带了这个文件，`etc/ssl` 作为备选）。否则在装有
+官方 Termux 的设备上会报：
+
+```
+OpenSSL configuration error: Permission denied,
+fopen(/data/data/com.termux/files/usr/etc/tls/openssl.cnf)
+```
+
+另外两点细节：
+
+- 解包出来的文件**没有可执行位**（安装器只给 `bin/`、`libexec` 等 chmod 0700），
+  所以 `apply_patches.py` 把 `home/` 也加进了 chmod 名单；profile 钩子同时用 `$PREFIX/bin/sh`
+  显式解释启动脚本，不依赖可执行位。
+- bootstrap 里**没有 `nohup`**（有 `setsid`），启动脚本用 `setsid` 把 node 挂到独立会话。
+
 ## 构建步骤
 
 ### 0. 准备目录

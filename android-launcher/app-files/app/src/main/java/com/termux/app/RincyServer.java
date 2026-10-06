@@ -176,8 +176,7 @@ public final class RincyServer {
         try {
             ProcessBuilder builder = new ProcessBuilder(PREFIX + "/bin/sh", BOOT_SCRIPT);
             builder.redirectErrorStream(true);
-            builder.environment().put("RINCY_PORT", String.valueOf(port));
-            builder.environment().put("RINCY_DATA_DIR", DATA_DIR);
+            builder.environment().putAll(buildEnvironment(port));
             java.lang.Process process = builder.start();
             try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
@@ -189,6 +188,36 @@ public final class RincyServer {
             output.append("启动异常: ").append(t);
         }
         return output.toString();
+    }
+
+    /**
+     * 子进程环境：Termux 二进制的 DT_RUNPATH 里写死了 /data/data/com.termux/files/usr/lib，
+     * 包名改掉后解析不到（设备上装了官方 Termux 时更会因为跨应用访问而被拒），
+     * 必须由父进程显式给出 LD_LIBRARY_PATH（优先级高于 DT_RUNPATH）；
+     * openssl 同理，库内编译进的 OPENSSLDIR 指向旧包名。
+     */
+    private static java.util.Map<String, String> buildEnvironment(int port) {
+        java.util.Map<String, String> env = new java.util.HashMap<>();
+        env.put("PREFIX", PREFIX);
+        env.put("HOME", HOME);
+        env.put("PATH", PREFIX + "/bin:" + PREFIX + "/bin/applets");
+        env.put("LD_LIBRARY_PATH", PREFIX + "/lib");
+        env.put("TMPDIR", PREFIX + "/tmp");
+        env.put("LANG", "en_US.UTF-8");
+        env.put("RINCY_PORT", String.valueOf(port));
+        env.put("RINCY_DATA_DIR", DATA_DIR);
+        String opensslConf = opensslConfPath();
+        if (opensslConf != null) env.put("OPENSSL_CONF", opensslConf);
+        return env;
+    }
+
+    /** 自带运行时的 openssl 配置：优先 etc/tls，其次 etc/ssl。 */
+    public static String opensslConfPath() {
+        String tls = PREFIX + "/etc/tls/openssl.cnf";
+        if (new File(tls).exists()) return tls;
+        String ssl = PREFIX + "/etc/ssl/openssl.cnf";
+        if (new File(ssl).exists()) return ssl;
+        return null;
     }
 
     /** 读取启动日志末尾若干行。 */

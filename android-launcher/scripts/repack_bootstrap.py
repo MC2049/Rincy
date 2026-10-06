@@ -213,11 +213,15 @@ LOG="$HOME_DIR/rincy-boot.log"
 PIDFILE="$HOME_DIR/.rincy.pid"
 DATA_DIR="${RINCY_DATA_DIR:-$HOME_DIR/rincy-data}"
 
-export PATH="$PREFIX/bin:$PATH"
-export LD_LIBRARY_PATH="$PREFIX/lib"
+# Termux 二进制的 DT_RUNPATH 里写死了 /data/data/com.rincy.launcher/files/usr/lib，
+# 改包名后解析不到（装了官方 Termux 的设备上更会因跨应用访问而被拒），
+# 必须显式给出库路径——LD_LIBRARY_PATH 优先级高于 DT_RUNPATH。
+export PREFIX
 export HOME="$HOME_DIR"
+export PATH="$PREFIX/bin:$PREFIX/bin/applets"
+export LD_LIBRARY_PATH="$PREFIX/lib"
 export TMPDIR="$PREFIX/tmp"
-export LANG=C.UTF-8
+export LANG=en_US.UTF-8
 export RINCY_DATA_DIR="$DATA_DIR"
 mkdir -p "$TMPDIR" "$HOME_DIR" "$DATA_DIR"
 
@@ -227,40 +231,70 @@ mkdir -p "$TMPDIR" "$HOME_DIR" "$DATA_DIR"
   echo "载荷=$PAYLOAD"
   echo "数据=$DATA_DIR"
 
-  # 1. 首次运行：解包内置 Node 运行时
+  # 1/4 首次运行：解包内置 Node 运行时
   if [ ! -x "$PREFIX/bin/node" ]; then
-    echo "[1/3] 正在解包内置 Node 运行时…"
+    echo "[1/4] 正在解包内置 Node 运行时…"
     if [ -f "$PAYLOAD/node-runtime.tar.gz" ]; then
       tar -xzf "$PAYLOAD/node-runtime.tar.gz" -C "$PREFIX" && echo "      解包完成" || echo "      ❌ 解包失败"
     else
       echo "      ❌ 找不到 $PAYLOAD/node-runtime.tar.gz"
     fi
   else
-    echo "[1/3] Node 运行时已就绪"
+    echo "[1/4] Node 运行时已就绪"
   fi
 
-  # 2. 已在运行就不重复启动
+  # 2/4 OpenSSL 配置：openssl 库里编译进的 OPENSSLDIR 同样指向旧包名，
+  #     在自家应用里访问会被拒（设备上就是 Permission denied）。
+  #     随包的 Node 运行时自带 etc/tls/openssl.cnf，优先用它，其次 etc/ssl。
+  if [ -f "$PREFIX/etc/tls/openssl.cnf" ]; then
+    OPENSSL_CONF="$PREFIX/etc/tls/openssl.cnf"
+  elif [ -f "$PREFIX/etc/ssl/openssl.cnf" ]; then
+    OPENSSL_CONF="$PREFIX/etc/ssl/openssl.cnf"
+  else
+    OPENSSL_CONF=""
+  fi
+  if [ -n "$OPENSSL_CONF" ]; then
+    export OPENSSL_CONF
+    echo "[2/4] OPENSSL_CONF=$OPENSSL_CONF"
+  else
+    echo "[2/4] ⚠️ 未找到 openssl.cnf，保持默认"
+  fi
+
+  # 3/4 已在运行就不重复启动
   if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
-    echo "[2/3] Rincy 已在运行 (pid $(cat "$PIDFILE"))"
+    echo "[3/4] Rincy 已在运行 (pid $(cat "$PIDFILE"))"
     exit 0
   fi
 
-  # 3. 启动服务（bootstrap 内没有 nohup，用 setsid 脱离会话，脚本退出后仍存活）
-  echo "[2/3] Node 版本: $("$PREFIX/bin/node" -v 2>&1)"
+  # 4/4 启动服务（bootstrap 内没有 nohup，用 setsid 脱离会话，脚本退出后仍存活）
+  echo "[3/4] Node 版本: $("$PREFIX/bin/node" -v 2>&1)"
   cd "$RINCY_DIR" || { echo "❌ 找不到 $RINCY_DIR"; exit 1; }
   RINCY_PORT="$PORT" RINCY_DATA_DIR="$DATA_DIR" \
     setsid "$PREFIX/bin/node" src/server.js >> "$LOG" 2>&1 &
   echo $! > "$PIDFILE"
-  echo "[3/3] 已启动，pid=$(cat "$PIDFILE")，端口=$PORT"
+  echo "[4/4] 已启动，pid=$(cat "$PIDFILE")，端口=$PORT"
 } >> "$LOG" 2>&1
 
 exit 0
 '''
 
 PROFILE_HOOK = r'''# Rincy 启动器：进入交互式 shell 时兜底拉起 Rincy（只拉起一次）
-if [ -x "$PREFIX/home/rincy-boot.sh" ] && [ -z "${RINCY_BOOTED:-}" ]; then
+# Termux 二进制的 DT_RUNPATH 指向旧包名，交互式会话也必须显式给出库路径，
+# 否则 bash / dpkg / pkg 之类的会报 "library ... not found"。
+PREFIX="${PREFIX:-/data/data/com.rincy.launcher/files/usr}"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-$PREFIX/lib}"
+if [ -z "${OPENSSL_CONF:-}" ]; then
+  if [ -f "$PREFIX/etc/tls/openssl.cnf" ]; then
+    export OPENSSL_CONF="$PREFIX/etc/tls/openssl.cnf"
+  elif [ -f "$PREFIX/etc/ssl/openssl.cnf" ]; then
+    export OPENSSL_CONF="$PREFIX/etc/ssl/openssl.cnf"
+  fi
+fi
+if [ -f "$PREFIX/home/rincy-boot.sh" ] && [ -z "${RINCY_BOOTED:-}" ]; then
   RINCY_BOOTED=1
-  "$PREFIX/home/rincy-boot.sh" &
+  # 解包出来的文件没有可执行位，用 sh 显式解释，顺便补上权限
+  chmod 700 "$PREFIX/home/rincy-boot.sh" 2>/dev/null
+  "$PREFIX/bin/sh" "$PREFIX/home/rincy-boot.sh" &
 fi
 '''
 
