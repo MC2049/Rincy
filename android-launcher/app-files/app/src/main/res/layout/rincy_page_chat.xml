@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/rincy_bg">
+
+    <WebView
+        android:id="@+id/webView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <LinearLayout
+        android:id="@+id/chatStatusBox"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/rincy_bg"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="32dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/chatStatusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/rincy_text"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/chatStatusDetail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:textColor="@color/rincy_muted"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/chatRetryButton"
+            style="@style/RincyPrimaryButton"
+            android:layout_marginTop="22dp"
+            android:text="@string/rincy_start_or_retry"
+            android:visibility="gone" />
+    </LinearLayout>
+</FrameLayout>

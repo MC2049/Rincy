@@ -14,13 +14,14 @@
   1. app/build.gradle           包名/应用名、关闭 native 编译与 bootstrap 自动下载
   2. TermuxConstants.java       TERMUX_PACKAGE_NAME / TERMUX_APP_NAME
   3. app strings.xml            应用名 ENTITY
-  4. AndroidManifest.xml        新增 RincyWebActivity
-  5. RincyWebActivity.java      以 WebView 承载 Rincy 界面（127.0.0.1:4780）
+  4. AndroidManifest.xml        启动器身份交给 RincyMainActivity、允许回环明文
+  5. app-files/**               启动器界面：底部任务栏（对话/设置）+ 大 WebView
   6. TermuxInstaller.java       bootstrap 改从 assets 读取（不再依赖 NDK/native blob）
   7. terminal-emulator         去掉 NDK 编译，改用预编译 libtermux.so（jniLibs）
   8. 放置 bootstrap zip 与 libtermux.so
 """
 import os
+import re
 import shutil
 import sys
 
@@ -30,6 +31,7 @@ LIBTERMUX_SO = os.environ.get("RINCY_LIBTERMUX_SO", "./libtermux.so")
 
 PKG_NAME = "com.rincy.launcher"
 APP_NAME = "Rincy"
+APP_VERSION = "0.2.0"
 
 log = []
 
@@ -60,6 +62,9 @@ def patch(rel, pairs, required=False):
 # ---------------------------------------------------------------- 1. app/build.gradle
 patch("app/build.gradle", [
     ('applicationId "com.termux"', 'applicationId "%s"' % PKG_NAME),
+    # 用启动器自己的版本号（便于覆盖安装）
+    ('        versionCode 1002\n        versionName "0.118.3"',
+     '        versionCode 2000\n        versionName "%s"' % APP_VERSION),
     ('TERMUX_PACKAGE_NAME = "com.termux"', 'TERMUX_PACKAGE_NAME = "%s"' % PKG_NAME),
     ('TERMUX_APP_NAME = "Termux"', 'TERMUX_APP_NAME = "%s"' % APP_NAME),
     ('TERMUX_API_APP_NAME = "Termux:API"', 'TERMUX_API_APP_NAME = "%s:API"' % APP_NAME),
@@ -111,47 +116,91 @@ patch("termux-shared/src/main/java/com/termux/shared/termux/TermuxConstants.java
 # ------------------------------------------------- 3. strings.xml
 patch("app/src/main/res/values/strings.xml", [
     ('<!ENTITY TERMUX_APP_NAME "Termux">', '<!ENTITY TERMUX_APP_NAME "%s">' % APP_NAME),
+    ('<string name="bootstrap_installer_body">Installing bootstrap packages…</string>',
+     '<string name="bootstrap_installer_body">正在部署 %s 运行环境…</string>' % APP_NAME),
 ])
 
-# ------------------------------------------------- 4. Manifest：新增 WebView 活动
+# ------------------------------------------------- 4. Manifest：启动器身份 + 回环明文
 manifest = read("app/src/main/AndroidManifest.xml")
-if "RincyWebActivity" not in manifest:
-    anchor = '''            <activity
-            android:name=".shared.activities.ReportActivity"'''
-    if anchor not in manifest:
-        raise SystemExit("[FAIL] AndroidManifest 中未找到插入锚点（上游可能已变更）")
-    manifest = manifest.replace(anchor, '''            <activity
-                android:name=".app.RincyWebActivity"
-                android:label="%s 启动器"
-                android:exported="false" />
-''' % APP_NAME + anchor)
-    write("app/src/main/AndroidManifest.xml", manifest)
 
-# ------------------------------------------------- 5. RincyWebActivity.java
-web_activity = os.path.join(TERMUX_DIR, "app/src/main/java/com/termux/app/RincyWebActivity.java")
-if not os.path.exists(web_activity):
-    os.makedirs(os.path.dirname(web_activity), exist_ok=True)
-    with open(web_activity, "w", encoding="utf-8") as f:
-        f.write('''package com.termux.app;
+# 清掉历史版本插入的单页 WebView 活动
+manifest = re.sub(r'\n\s*<activity\s+android:name="\.app\.RincyWebActivity".*?/>', '', manifest, flags=re.S)
 
-import android.app.Activity;
-import android.os.Bundle;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
+# WebView 访问 127.0.0.1 属于明文流量，targetSdk 28 起默认被禁
+if "android:usesCleartextTraffic" not in manifest:
+    app_anchor = '''        android:supportsRtl="false"
+        android:theme="@style/Theme.Termux">'''
+    if app_anchor not in manifest:
+        raise SystemExit("[FAIL] AndroidManifest 中未找到 application 标签锚点")
+    manifest = manifest.replace(
+        app_anchor,
+        app_anchor[:-1] + '\n        android:usesCleartextTraffic="true">')
 
-/** 以 WebView 打开本机 Rincy 服务（默认端口 4780）。 */
-public class RincyWebActivity extends Activity {
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        WebView webView = new WebView(this);
-        webView.setWebViewClient(new WebViewClient());
-        webView.loadUrl("http://127.0.0.1:4780");
-        setContentView(webView);
-    }
-}
-''')
-    log.append("app/src/main/java/com/termux/app/RincyWebActivity.java")
+# 启动器身份交给 RincyMainActivity；TermuxActivity 退回普通活动，仅开发模式按需打开
+launcher_filters = '''            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+
+'''
+if launcher_filters in manifest:
+    manifest = manifest.replace(launcher_filters, '')
+
+termux_activity_anchor = '''        <activity
+            android:name=".app.TermuxActivity"'''
+if termux_activity_anchor not in manifest:
+    raise SystemExit("[FAIL] AndroidManifest 中未找到 TermuxActivity 声明")
+if ".app.RincyMainActivity" not in manifest:
+    main_activity = '''        <activity
+            android:name=".app.RincyMainActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|density|screenLayout|uiMode|keyboard|keyboardHidden|navigation"
+            android:exported="true"
+            android:label="@string/application_name"
+            android:launchMode="singleTask"
+            android:theme="@style/RincyTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+'''
+    manifest = manifest.replace(termux_activity_anchor, main_activity + termux_activity_anchor)
+write("app/src/main/AndroidManifest.xml", manifest)
+
+# ------------------------------------------------- 5. 启动器界面：app-files/ 覆盖进源码树
+app_files = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "app-files")
+if not os.path.isdir(app_files):
+    raise SystemExit("[FAIL] 未找到启动器界面源码目录 app-files/")
+copied = 0
+for root, _dirs, files in os.walk(app_files):
+    for name in files:
+        src = os.path.join(root, name)
+        rel = os.path.relpath(src, app_files)
+        dst = os.path.join(TERMUX_DIR, rel)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copyfile(src, dst)
+        log.append(rel)
+        copied += 1
+if not copied:
+    raise SystemExit("[FAIL] app-files/ 是空的")
+# 旧的单页 WebView 活动已被 RincyMainActivity 取代
+stale = os.path.join(TERMUX_DIR, "app/src/main/java/com/termux/app/RincyWebActivity.java")
+if os.path.exists(stale):
+    os.remove(stale)
+    log.append("删除 app/src/main/java/com/termux/app/RincyWebActivity.java")
 
 # ------------------------------------------------- 6. TermuxInstaller：改读 assets
 installer = "app/src/main/java/com/termux/app/TermuxInstaller.java"

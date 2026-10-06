@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/rincy_bg"
+    android:orientation="vertical">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <include
+            android:id="@+id/pageChat"
+            layout="@layout/rincy_page_chat"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <include
+            android:id="@+id/pageSettings"
+            layout="@layout/rincy_page_settings"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/rincy_line" />
+
+    <!-- 底部任务栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/rincy_surface"
+        android:orientation="horizontal"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:paddingLeft="8dp"
+        android:paddingRight="8dp">
+
+        <LinearLayout
+            android:id="@+id/navChat"
+            style="@style/RincyNavItem">
+
+            <ImageView
+                android:id="@+id/navChatIcon"
+                style="@style/RincyNavIcon"
+                android:contentDescription="@string/rincy_tab_chat"
+                android:src="@drawable/ic_rincy_chat" />
+
+            <TextView
+                android:id="@+id/navChatLabel"
+                style="@style/RincyNavLabel"
+                android:text="@string/rincy_tab_chat" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/navSettings"
+            style="@style/RincyNavItem">
+
+            <ImageView
+                android:id="@+id/navSettingsIcon"
+                style="@style/RincyNavIcon"
+                android:contentDescription="@string/rincy_tab_settings"
+                android:src="@drawable/ic_rincy_settings" />
+
+            <TextView
+                android:id="@+id/navSettingsLabel"
+                style="@style/RincyNavLabel"
+                android:text="@string/rincy_tab_settings" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

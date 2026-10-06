@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rincy_tab_chat">对话</string>
+    <string name="rincy_tab_settings">设置</string>
+
+    <string name="rincy_section_status">运行状态</string>
+    <string name="rincy_status_unknown">检测中…</string>
+    <string name="rincy_start">启动</string>
+    <string name="rincy_stop">停止</string>
+    <string name="rincy_restart">重启</string>
+    <string name="rincy_start_or_retry">启动 / 重试</string>
+
+    <string name="rincy_section_connection">连接</string>
+    <string name="rincy_port_hint">端口</string>
+    <string name="rincy_apply">应用</string>
+    <string name="rincy_port_desc">Rincy 在本机监听该端口，默认 4780。改动后会重启服务。</string>
+
+    <string name="rincy_section_mode">模式</string>
+    <string name="rincy_mode_player">玩家模式</string>
+    <string name="rincy_mode_player_desc">只保留基础设置，界面简洁。</string>
+    <string name="rincy_mode_dev">开发模式</string>
+    <string name="rincy_mode_dev_desc">额外提供终端、日志、环境重置等工具。</string>
+    <string name="rincy_autostart">打开应用时自动启动</string>
+    <string name="rincy_autostart_desc">关闭后需在设置里手动启动。</string>
+
+    <string name="rincy_section_dev">开发工具</string>
+    <string name="rincy_dev_termux">打开 Termux 终端</string>
+    <string name="rincy_dev_log">查看启动日志</string>
+    <string name="rincy_dev_reset">重置运行环境</string>
+
+    <string name="rincy_footer">Rincy 启动器 · 本机服务 127.0.0.1</string>
+</resources>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 取自 Rincy 网页端配色，保持视觉一致 -->
+    <color name="rincy_bg">#FF0F1115</color>
+    <color name="rincy_surface">#FF171A21</color>
+    <color name="rincy_surface_alt">#FF1E222B</color>
+    <color name="rincy_line">#FF262B36</color>
+    <color name="rincy_accent">#FF4D6BFE</color>
+    <color name="rincy_accent_soft">#FF1B2A6B</color>
+    <color name="rincy_text">#FFF3F4F6</color>
+    <color name="rincy_muted">#FF8A8F98</color>
+    <color name="rincy_ok">#FF30B15C</color>
+    <color name="rincy_err">#FFE5484D</color>
+</resources>

@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/rincy_bg"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <!-- 运行状态 -->
+        <LinearLayout style="@style/RincyCard">
+
+            <TextView
+                style="@style/RincySectionTitle"
+                android:text="@string/rincy_section_status" />
+
+            <TextView
+                android:id="@+id/statusTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/rincy_status_unknown"
+                android:textColor="@color/rincy_text"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/statusDetail"
+                style="@style/RincyItemDesc"
+                android:text="@string/rincy_status_unknown" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/startStopButton"
+                    style="@style/RincyPrimaryButton"
+                    android:text="@string/rincy_start" />
+
+                <Button
+                    android:id="@+id/btnRestart"
+                    style="@style/RincyPrimaryButton"
+                    android:layout_marginLeft="10dp"
+                    android:background="@drawable/rincy_btn_ghost"
+                    android:text="@string/rincy_restart"
+                    android:textColor="@color/rincy_text" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 连接设置 -->
+        <LinearLayout style="@style/RincyCard">
+
+            <TextView
+                style="@style/RincySectionTitle"
+                android:text="@string/rincy_section_connection" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/portInput"
+                    style="@style/RincyInput"
+                    android:hint="@string/rincy_port_hint" />
+
+                <Button
+                    android:id="@+id/portSaveButton"
+                    style="@style/RincyPrimaryButton"
+                    android:layout_marginLeft="10dp"
+                    android:text="@string/rincy_apply" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/RincyItemDesc"
+                android:text="@string/rincy_port_desc" />
+        </LinearLayout>
+
+        <!-- 模式 -->
+        <LinearLayout style="@style/RincyCard">
+
+            <TextView
+                style="@style/RincySectionTitle"
+                android:text="@string/rincy_section_mode" />
+
+            <RadioGroup
+                android:id="@+id/modeGroup"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <RadioButton
+                    android:id="@+id/modePlayer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/rincy_mode_player"
+                    android:textColor="@color/rincy_text" />
+
+                <TextView
+                    style="@style/RincyItemDesc"
+                    android:layout_marginLeft="34dp"
+                    android:text="@string/rincy_mode_player_desc" />
+
+                <RadioButton
+                    android:id="@+id/modeDev"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/rincy_mode_dev"
+                    android:textColor="@color/rincy_text" />
+
+                <TextView
+                    style="@style/RincyItemDesc"
+                    android:layout_marginLeft="34dp"
+                    android:text="@string/rincy_mode_dev_desc" />
+            </RadioGroup>
+
+            <Switch
+                android:id="@+id/autostartSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/rincy_autostart"
+                android:textColor="@color/rincy_text" />
+
+            <TextView
+                style="@style/RincyItemDesc"
+                android:text="@string/rincy_autostart_desc" />
+        </LinearLayout>
+
+        <!-- 开发模式专属 -->
+        <LinearLayout
+            android:id="@+id/devGroup"
+            style="@style/RincyCard"
+            android:visibility="gone">
+
+            <TextView
+                style="@style/RincySectionTitle"
+                android:text="@string/rincy_section_dev" />
+
+            <Button
+                android:id="@+id/btnOpenTermux"
+                style="@style/RincyGhostButton"
+                android:text="@string/rincy_dev_termux" />
+
+            <Button
+                android:id="@+id/btnViewLog"
+                style="@style/RincyGhostButton"
+                android:text="@string/rincy_dev_log" />
+
+            <Button
+                android:id="@+id/btnResetEnv"
+                style="@style/RincyGhostButton"
+                android:text="@string/rincy_dev_reset" />
+
+            <TextView
+                android:id="@+id/devPaths"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="monospace"
+                android:textColor="@color/rincy_muted"
+                android:textIsSelectable="true"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="10dp"
+            android:gravity="center"
+            android:text="@string/rincy_footer"
+            android:textColor="@color/rincy_muted"
+            android:textSize="11sp" />
+    </LinearLayout>
+</ScrollView>

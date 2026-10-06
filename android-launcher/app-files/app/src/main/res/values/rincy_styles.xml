@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 启动器主题：深色、无标题栏 -->
+    <style name="RincyTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/rincy_bg</item>
+        <item name="android:colorAccent">@color/rincy_accent</item>
+        <item name="android:colorPrimary">@color/rincy_surface</item>
+        <item name="android:colorPrimaryDark">@color/rincy_bg</item>
+        <item name="android:statusBarColor">@color/rincy_bg</item>
+        <item name="android:navigationBarColor">@color/rincy_surface</item>
+        <item name="android:textColorPrimary">@color/rincy_text</item>
+        <item name="android:textColorSecondary">@color/rincy_muted</item>
+        <item name="android:textColorHint">@color/rincy_muted</item>
+    </style>
+
+    <style name="RincyCard">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:background">@drawable/rincy_card</item>
+        <item name="android:padding">16dp</item>
+        <item name="android:layout_marginBottom">12dp</item>
+    </style>
+
+    <style name="RincySectionTitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/rincy_muted</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:layout_marginBottom">10dp</item>
+    </style>
+
+    <style name="RincyItemTitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/rincy_text</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <style name="RincyItemDesc">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/rincy_muted</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:layout_marginTop">4dp</item>
+    </style>
+
+    <style name="RincyPrimaryButton">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:background">@drawable/rincy_btn_primary</item>
+        <item name="android:textColor">#FFFFFFFF</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:paddingLeft">20dp</item>
+        <item name="android:paddingRight">20dp</item>
+    </style>
+
+    <style name="RincyGhostButton">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:background">@drawable/rincy_btn_ghost</item>
+        <item name="android:textColor">@color/rincy_text</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:gravity">center_vertical|start</item>
+        <item name="android:paddingLeft">16dp</item>
+        <item name="android:paddingRight">16dp</item>
+        <item name="android:layout_marginTop">8dp</item>
+    </style>
+
+    <style name="RincyInput">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">@drawable/rincy_input</item>
+        <item name="android:textColor">@color/rincy_text</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:paddingLeft">12dp</item>
+        <item name="android:paddingRight">12dp</item>
+        <item name="android:inputType">number</item>
+    </style>
+
+    <style name="RincyNavItem">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">54dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:gravity">center</item>
+        <item name="android:layout_marginLeft">6dp</item>
+        <item name="android:layout_marginRight">6dp</item>
+    </style>
+
+    <style name="RincyNavIcon">
+        <item name="android:layout_width">22dp</item>
+        <item name="android:layout_height">22dp</item>
+    </style>
+
+    <style name="RincyNavLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:layout_marginTop">2dp</item>
+    </style>
+</resources>

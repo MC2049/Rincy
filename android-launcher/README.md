@@ -17,20 +17,42 @@ APK
 │     ├── home/node-runtime.tar.gz   ← Node 24 运行时（含 npm/corepack）
 │     ├── home/rincy/                ← Rincy 源码（含 node_modules: busboy + tar）
 │     ├── home/rincy-boot.sh         ← 启动脚本
-│     └── etc/profile.d/99-rincy.sh  ← 会话启动时自动拉起 Rincy
+│     └── etc/profile.d/99-rincy.sh  ← 兜底：进 Termux 会话时自动拉起 Rincy
 └── lib/arm64-v8a/libtermux.so       ← 终端 JNI（预编译，见下文“aarch64 宿主构建”）
 ```
 
+> ⚠️ 目录约定：Termux 安装器把 zip 条目解到**前缀目录**下，而官方 bootstrap 顶层只有
+> `bin/ etc/ lib/ ...`、没有 `home/`，所以上面这些 `home/*` 实际落在
+> `files/usr/home/`。启动脚本与 Java 侧据此统一用 `$PREFIX/home` 定位载荷；
+> 用户数据则放在真正的 `$HOME`（`files/home`）下。
+
 首次打开：
 
-1. `TermuxInstaller` 把 `assets/bootstrap-aarch64.zip` 解包到
-   `/data/data/com.rincy.launcher/files/usr`
-2. 打开终端会话时执行 `etc/profile.d/99-rincy.sh` → `home/rincy-boot.sh`
-3. 启动脚本解包 `node-runtime.tar.gz`（若未解过），然后
-   `RINCY_PORT=4780 nohup node src/server.js`，日志写到 `~/rincy-boot.log`
-4. `RincyWebActivity`（WebView）打开 `http://127.0.0.1:4780`
+1. `RincyMainActivity` 检查环境 → `TermuxInstaller` 把 `assets/bootstrap-aarch64.zip`
+   解包到 `/data/data/com.rincy.launcher/files/usr`（中文进度提示）
+2. 前台直接执行 `$PREFIX/home/rincy-boot.sh`：解包 `node-runtime.tar.gz`（若未解过），
+   再用 `setsid node src/server.js` 把服务挂到独立会话（bootstrap 里没有 `nohup`）
+3. 界面用 WebView 打开 `http://127.0.0.1:<端口>`（默认 4780）
 
-> 想直接看界面：Termux 会话起来后按返回，或从启动器里打开 `RincyWebActivity`。
+界面结构（**打开应用不再进入 Termux 终端**）：
+
+```
+┌───────────────────────────────┐
+│                               │
+│   对话：Rincy 网页（WebView）  │
+│                               │
+├───────────────────────────────┤
+│      💬 对话    ⚙️ 设置        │  ← 底部任务栏
+└───────────────────────────────┘
+```
+
+- **对话**：全屏 WebView；服务未就绪时显示状态提示与「启动 / 重试」
+- **设置**：启动 / 停止 / 重启、端口、玩家模式 / 开发模式、打开应用时自动启动
+- **开发模式**额外提供：打开 Termux 终端、查看启动日志、重置运行环境，
+  以及前缀 / 源码 / 数据 / 日志的实际路径
+
+用户数据在 `$HOME/rincy-data`（`files/home/rincy-data`），与运行环境解耦，
+「重置运行环境」不会丢智能体和设置。
 
 ## 为什么 bootstrap 走 assets，而不是官方那种 native blob
 

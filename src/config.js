@@ -9,7 +9,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+// 数据目录：可用 RINCY_DATA_DIR 指定（Android 启动器借此把数据放在私有 home 下，重置运行环境不丢）
+const DATA_DIR = process.env.RINCY_DATA_DIR
+  ? path.resolve(process.env.RINCY_DATA_DIR)
+  : path.join(__dirname, '..', 'data');
 const AGENTS_DIR = path.join(DATA_DIR, 'agents');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 

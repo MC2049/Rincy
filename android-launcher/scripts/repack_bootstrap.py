@@ -199,59 +199,68 @@ def build_node_runtime():
 
 
 BOOT_SH = r'''#!/bin/sh
-# Rincy 启动脚本（由 APK 内置，首次运行会解包 Node 运行时）
+# Rincy 启动脚本（由 APK 内置）
+# 注意：Termux 安装器把 bootstrap zip 的条目解到前缀目录下，官方包没有 home/，
+#       所以随包附带的 home/* 实际位于 $PREFIX/home。
 set -u
 
 PREFIX="${PREFIX:-/data/data/com.rincy.launcher/files/usr}"
 HOME_DIR="${HOME:-/data/data/com.rincy.launcher/files/home}"
-RINCY_DIR="$HOME_DIR/rincy"
+PAYLOAD="$PREFIX/home"
+RINCY_DIR="$PAYLOAD/rincy"
 PORT="${RINCY_PORT:-4780}"
 LOG="$HOME_DIR/rincy-boot.log"
+PIDFILE="$HOME_DIR/.rincy.pid"
+DATA_DIR="${RINCY_DATA_DIR:-$HOME_DIR/rincy-data}"
 
 export PATH="$PREFIX/bin:$PATH"
 export LD_LIBRARY_PATH="$PREFIX/lib"
 export HOME="$HOME_DIR"
 export TMPDIR="$PREFIX/tmp"
 export LANG=C.UTF-8
-mkdir -p "$TMPDIR"
+export RINCY_DATA_DIR="$DATA_DIR"
+mkdir -p "$TMPDIR" "$HOME_DIR" "$DATA_DIR"
 
 {
   echo "=== Rincy 启动 $(date) ==="
   echo "PREFIX=$PREFIX"
+  echo "载荷=$PAYLOAD"
+  echo "数据=$DATA_DIR"
 
-  # 1. 首次运行：解包内置的 Node 运行时
+  # 1. 首次运行：解包内置 Node 运行时
   if [ ! -x "$PREFIX/bin/node" ]; then
     echo "[1/3] 正在解包内置 Node 运行时…"
-    if [ -f "$HOME_DIR/node-runtime.tar.gz" ]; then
-      tar -xzf "$HOME_DIR/node-runtime.tar.gz" -C "$PREFIX" && echo "      解包完成" || echo "      ❌ 解包失败"
+    if [ -f "$PAYLOAD/node-runtime.tar.gz" ]; then
+      tar -xzf "$PAYLOAD/node-runtime.tar.gz" -C "$PREFIX" && echo "      解包完成" || echo "      ❌ 解包失败"
     else
-      echo "      ❌ 找不到 node-runtime.tar.gz"
+      echo "      ❌ 找不到 $PAYLOAD/node-runtime.tar.gz"
     fi
   else
     echo "[1/3] Node 运行时已就绪"
   fi
 
-  # 2. 已经在跑就不重复启动
-  if [ -f "$HOME_DIR/.rincy.pid" ] && kill -0 "$(cat "$HOME_DIR/.rincy.pid")" 2>/dev/null; then
-    echo "[2/3] Rincy 已在运行 (pid $(cat "$HOME_DIR/.rincy.pid"))"
+  # 2. 已在运行就不重复启动
+  if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+    echo "[2/3] Rincy 已在运行 (pid $(cat "$PIDFILE"))"
     exit 0
   fi
 
-  # 3. 启动服务
+  # 3. 启动服务（bootstrap 内没有 nohup，用 setsid 脱离会话，脚本退出后仍存活）
   echo "[2/3] Node 版本: $("$PREFIX/bin/node" -v 2>&1)"
   cd "$RINCY_DIR" || { echo "❌ 找不到 $RINCY_DIR"; exit 1; }
-  RINCY_PORT="$PORT" nohup "$PREFIX/bin/node" src/server.js >> "$LOG" 2>&1 &
-  echo $! > "$HOME_DIR/.rincy.pid"
-  echo "[3/3] 已启动，pid=$(cat "$HOME_DIR/.rincy.pid")，端口=$PORT"
+  RINCY_PORT="$PORT" RINCY_DATA_DIR="$DATA_DIR" \
+    setsid "$PREFIX/bin/node" src/server.js >> "$LOG" 2>&1 &
+  echo $! > "$PIDFILE"
+  echo "[3/3] 已启动，pid=$(cat "$PIDFILE")，端口=$PORT"
 } >> "$LOG" 2>&1
 
 exit 0
 '''
 
-PROFILE_HOOK = r'''# Rincy 启动器：交互式 shell 启动时自动拉起 Rincy（只拉起一次）
-if [ -x "$PREFIX/../home/rincy-boot.sh" ] && [ -z "${RINCY_BOOTED:-}" ]; then
+PROFILE_HOOK = r'''# Rincy 启动器：进入交互式 shell 时兜底拉起 Rincy（只拉起一次）
+if [ -x "$PREFIX/home/rincy-boot.sh" ] && [ -z "${RINCY_BOOTED:-}" ]; then
   RINCY_BOOTED=1
-  "$PREFIX/../home/rincy-boot.sh" &
+  "$PREFIX/home/rincy-boot.sh" &
 fi
 '''
 
