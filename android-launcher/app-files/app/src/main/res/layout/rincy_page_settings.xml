@@ -170,73 +170,6 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- 升级 -->
-        <LinearLayout style="@style/RincyCard">
-
-            <TextView
-                style="@style/RincySectionTitle"
-                android:text="@string/rincy_section_upgrade" />
-
-            <RadioGroup
-                android:id="@+id/upgradeSourceGroup"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
-
-                <RadioButton
-                    android:id="@+id/upgradeGithub"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="GitHub (mc2049/Rincy)"
-                    android:textColor="@color/rincy_text"
-                    android:checked="true" />
-
-                <RadioButton
-                    android:id="@+id/upgradeGitee"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Gitee (mc2049/Rincy)"
-                    android:textColor="@color/rincy_text" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginTop="4dp">
-
-                    <RadioButton
-                        android:id="@+id/upgradeCustom"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="自定义"
-                        android:textColor="@color/rincy_text" />
-
-                    <EditText
-                        android:id="@+id/upgradeUrlInput"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:hint="https://.../Rincy.git"
-                        android:textSize="12sp"
-                        android:background="@drawable/rincy_input" />
-                </LinearLayout>
-            </RadioGroup>
-
-            <Button
-                android:id="@+id/btnUpgrade"
-                style="@style/RincyPrimaryButton"
-                android:text="@string/rincy_upgrade_run"
-                android:layout_marginTop="8dp" />
-
-            <TextView
-                android:id="@+id/upgradeStatusText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textColor="@color/rincy_muted"
-                android:textSize="12sp"
-                android:layout_marginTop="6dp" />
-        </LinearLayout>
-
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -246,5 +179,19 @@
             android:text="@string/rincy_footer"
             android:textColor="@color/rincy_muted"
             android:textSize="11sp" />
-    </LinearLayout>
+    
+        <LinearLayout style="@style/RincyCard">
+            <TextView style="@style/RincySectionTitle" android:text="升级 Rincy" />
+            <RadioGroup android:id="@+id/upgradeSourceGroup" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <RadioButton android:id="@+id/upgradeGithub" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="GitHub (mc2049/Rincy)" android:checked="true" android:textColor="@color/rincy_text" />
+                <RadioButton android:id="@+id/upgradeGitee" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Gitee (mc2049/Rincy)" android:textColor="@color/rincy_text" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="4dp">
+                    <RadioButton android:id="@+id/upgradeCustom" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="自定义" android:textColor="@color/rincy_text" />
+                    <EditText android:id="@+id/upgradeUrlInput" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:hint="https://.../Rincy.git" android:textSize="12sp" android:background="@drawable/rincy_input" />
+                </LinearLayout>
+            </RadioGroup>
+            <Button android:id="@+id/btnUpgrade" style="@style/RincyPrimaryButton" android:text="执行升级" android:layout_marginTop="8dp" />
+            <TextView android:id="@+id/upgradeStatusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/rincy_muted" android:textSize="12sp" android:layout_marginTop="6dp" />
+        </LinearLayout>
+</LinearLayout>
 </ScrollView>

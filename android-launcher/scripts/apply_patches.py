@@ -31,7 +31,7 @@ LIBTERMUX_SO = os.environ.get("RINCY_LIBTERMUX_SO", "./libtermux.so")
 
 PKG_NAME = "com.rincy.launcher"
 APP_NAME = "Rincy"
-APP_VERSION = "0.2.1"
+APP_VERSION = "0.2.3"
 
 log = []
 
@@ -64,7 +64,7 @@ patch("app/build.gradle", [
     ('applicationId "com.termux"', 'applicationId "%s"' % PKG_NAME),
     # 用启动器自己的版本号（便于覆盖安装）
     ('        versionCode 1002\n        versionName "0.118.3"',
-     '        versionCode 2000\n        versionName "%s"' % APP_VERSION),
+     '        versionCode 2003\n        versionName "%s"' % APP_VERSION),
     ('TERMUX_PACKAGE_NAME = "com.termux"', 'TERMUX_PACKAGE_NAME = "%s"' % PKG_NAME),
     ('TERMUX_APP_NAME = "Termux"', 'TERMUX_APP_NAME = "%s"' % APP_NAME),
     ('TERMUX_API_APP_NAME = "Termux:API"', 'TERMUX_API_APP_NAME = "%s:API"' % APP_NAME),
@@ -135,6 +135,16 @@ if "android:usesCleartextTraffic" not in manifest:
     manifest = manifest.replace(
         app_anchor,
         app_anchor[:-1] + '\n        android:usesCleartextTraffic="true">')
+
+# WebView 导入/导出需要把文件写进公共「下载」目录，API 29 需要保留旧版存储模型
+if "android:requestLegacyExternalStorage" not in manifest:
+    legacy_anchor = '        android:label="@string/application_name"\n'
+    if legacy_anchor not in manifest:
+        raise SystemExit("[FAIL] AndroidManifest 中未找到 label 锚点")
+    manifest = manifest.replace(
+        legacy_anchor,
+        legacy_anchor + '        android:requestLegacyExternalStorage="true"\n',
+        1)
 
 # 启动器身份交给 RincyMainActivity；TermuxActivity 退回普通活动，仅开发模式按需打开
 launcher_filters = '''            <intent-filter>

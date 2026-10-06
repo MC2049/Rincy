@@ -195,7 +195,7 @@ public final class RincyServer {
      * 必须由父进程显式给出 LD_LIBRARY_PATH（优先级高于 DT_RUNPATH）；
      * openssl 同理，库内编译进的 OPENSSLDIR 指向旧包名。
      */
-    private static java.util.Map<String, String> buildEnvironment(int port) {
+    public static java.util.Map<String, String> buildEnvironment(int port) {
         java.util.Map<String, String> env = new java.util.HashMap<>();
         env.put("PREFIX", PREFIX);
         env.put("HOME", HOME);

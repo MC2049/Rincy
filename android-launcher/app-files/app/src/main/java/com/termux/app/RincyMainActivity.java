@@ -3,18 +3,39 @@ package com.termux.app;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Typeface;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
+import android.util.Base64;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.CookieManager;
+import android.webkit.DownloadListener;
+import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLDecoder;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -59,12 +80,20 @@ public class RincyMainActivity extends Activity {
     private EditText portInput;
     private RadioGroup modeGroup;
     private Switch autostartSwitch;
+    private Button btnUpgrade;
+    private RadioGroup upgradeSourceGroup;
+    private EditText upgradeUrlInput;
+    private TextView upgradeStatusText;
     private View devGroup;
     private TextView devPaths;
 
     private int currentTab = TAB_CHAT;
     private boolean working = false;
     private int loadedPort = -1;
+
+    private static final int REQ_FILE_CHOOSER = 1001;
+    private static final int REQ_STORAGE = 1002;
+    private ValueCallback<Uri[]> filePathCallback;
 
     private final Runnable statusTick = new Runnable() {
         @Override
@@ -136,6 +165,10 @@ public class RincyMainActivity extends Activity {
         autostartSwitch = findViewById(R.id.autostartSwitch);
         devGroup = findViewById(R.id.devGroup);
         devPaths = findViewById(R.id.devPaths);
+        btnUpgrade = findViewById(R.id.btnUpgrade);
+        upgradeSourceGroup = findViewById(R.id.upgradeSourceGroup);
+        upgradeUrlInput = findViewById(R.id.upgradeUrlInput);
+        upgradeStatusText = findViewById(R.id.upgradeStatusText);
     }
 
     private void setupNavigation() {
@@ -165,6 +198,39 @@ public class RincyMainActivity extends Activity {
 
     // ------------------------------------------------------------------ 对话页
 
+    /**
+     * 注入到页面的下载增强脚本。
+     *
+     * WebView 原生不支持 blob: 下载，也不支持 window.open 触发的附件下载：
+     *   1) 单个智能体导出用 window.open('/api/agents/export?agentId=..')
+     *   2) 全部导出用 fetch → blob → 新建 <a download> 并 a.click()
+     * 注意第 2 种锚点没有插进 DOM，事件不会冒泡到 document，
+     * 因此必须改写 HTMLAnchorElement.prototype.click 才能拦到。
+     * 两条路径统一交给原生桥 RincyNative 落盘到「下载」目录。
+     */
+    private static final String JS_DOWNLOAD_SHIM =
+        "(function(){if(window.__rincyDl)return;window.__rincyDl=1;\n" +
+        "function saveBlob(href,name){fetch(href).then(function(r){return r.blob();}).then(function(b){\n" +
+        "var fr=new FileReader();\n" +
+        "fr.onload=function(){var s=String(fr.result);RincyNative.saveBase64(name||'download.bin',s.slice(s.indexOf(',')+1));};\n" +
+        "fr.readAsDataURL(b);\n" +
+        "}).catch(function(e){RincyNative.toast('导出失败: '+e);});}\n" +
+        "function handle(href,name){if(!href)return false;\n" +
+        "if(href.indexOf('blob:')===0){saveBlob(href,name);return true;}\n" +
+        "if(href.indexOf('/api/agents/export')!==-1){RincyNative.download(href,name||'');return true;}\n" +
+        "return false;}\n" +
+        "var oc=HTMLAnchorElement.prototype.click;\n" +
+        "HTMLAnchorElement.prototype.click=function(){try{\n" +
+        "if(handle(this.href||'',this.getAttribute('download')||''))return;}catch(e){}\n" +
+        "return oc.apply(this,arguments);};\n" +
+        "var ow=window.open;\n" +
+        "window.open=function(u){try{if(u&&handle(String(u),''))return null;}catch(e){}\n" +
+        "return ow.apply(window,arguments);};\n" +
+        "document.addEventListener('click',function(ev){var t=ev.target;\n" +
+        "var a=(t&&t.closest)?t.closest('a[download]'):null;if(!a)return;\n" +
+        "try{if(handle(a.href||'',a.getAttribute('download')||'')){ev.preventDefault();ev.stopPropagation();}}catch(e){}\n" +
+        "},true);})();";
+
     private void setupWebView() {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -173,15 +239,23 @@ public class RincyMainActivity extends Activity {
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         settings.setSupportZoom(false);
-        settings.setAllowFileAccess(false);
-        settings.setAllowContentAccess(false);
+        // 导入需要 WebView 能读取文件选择器返回的 content:// 与 file:// URI
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
         webView.setBackgroundColor(getResources().getColor(R.color.rincy_bg));
         WebView.setWebContentsDebuggingEnabled(true);
+
+        CookieManager.getInstance().setAcceptCookie(true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
+
+        webView.addJavascriptInterface(new RincyNative(), "RincyNative");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
                 if (loadedPort > 0) hideChatStatus();
+                // 每次页面（重新）加载后都重新注入下载增强脚本
+                view.evaluateJavascript(JS_DOWNLOAD_SHIM, null);
             }
 
             @Override
@@ -190,10 +264,183 @@ public class RincyMainActivity extends Activity {
             }
         });
 
+        // 导入：<input type="file"> 必须由 WebChromeClient 接管，否则点击无反应
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
+                                             FileChooserParams params) {
+                if (filePathCallback != null) {
+                    filePathCallback.onReceiveValue(null);
+                }
+                filePathCallback = callback;
+                try {
+                    Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("*/*");
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    String[] accept = params == null ? null : params.getAcceptTypes();
+                    if (accept != null && accept.length > 0 && accept[0] != null
+                        && !accept[0].isEmpty() && !"*/*".equals(accept[0])) {
+                        intent.setType(accept[0]);
+                    }
+                    startActivityForResult(Intent.createChooser(intent, "选择文件"), REQ_FILE_CHOOSER);
+                    return true;
+                } catch (Throwable t) {
+                    filePathCallback = null;
+                    toast("无法打开文件选择器: " + t.getMessage());
+                    return false;
+                }
+            }
+        });
+
+        // 导出：服务端返回附件的直接下载
+        webView.setDownloadListener(new DownloadListener() {
+            @Override
+            public void onDownloadStart(String url, String userAgent, String contentDisposition,
+                                        String mimetype, long contentLength) {
+                saveFromUrl(url, parseFilename(contentDisposition));
+            }
+        });
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !hasStoragePermission()) {
+            requestPermissions(new String[]{"android.permission.WRITE_EXTERNAL_STORAGE"}, REQ_STORAGE);
+        }
+
         findViewById(R.id.chatRetryButton).setOnClickListener(v -> {
             hideChatStatus();
             startServer(true);
         });
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_FILE_CHOOSER) return;
+        if (filePathCallback == null) return;
+        Uri[] results = null;
+        if (resultCode == RESULT_OK && data != null) {
+            if (data.getClipData() != null) {
+                int count = data.getClipData().getItemCount();
+                results = new Uri[count];
+                for (int i = 0; i < count; i++) {
+                    results[i] = data.getClipData().getItemAt(i).getUri();
+                }
+            } else if (data.getData() != null) {
+                results = new Uri[]{data.getData()};
+            }
+        }
+        filePathCallback.onReceiveValue(results);
+        filePathCallback = null;
+    }
+
+    // ------------------------------------------------------------------ 导出落盘
+
+    /** 页面注入的原生桥：负责把导出内容真正写到「下载」目录。 */
+    private class RincyNative {
+        @JavascriptInterface
+        public void download(String url, String name) {
+            saveFromUrl(url, name);
+        }
+
+        @JavascriptInterface
+        public void saveBase64(String name, String base64) {
+            try {
+                saveBytes(name, Base64.decode(base64, Base64.DEFAULT));
+            } catch (Throwable t) {
+                runOnUiThread(() -> toast("保存失败: " + t.getMessage()));
+            }
+        }
+
+        @JavascriptInterface
+        public void toast(String message) {
+            runOnUiThread(() -> RincyMainActivity.this.toast(message));
+        }
+    }
+
+    private void saveFromUrl(String url, String name) {
+        new Thread(() -> {
+            try {
+                String abs = url;
+                if (abs != null && abs.startsWith("/")) {
+                    abs = "http://127.0.0.1:" + prefs.getPort() + abs;
+                }
+                HttpURLConnection conn = (HttpURLConnection) new URL(abs).openConnection();
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(120000);
+                String cookie = CookieManager.getInstance().getCookie(abs);
+                if (cookie != null) conn.setRequestProperty("Cookie", cookie);
+                conn.connect();
+                int code = conn.getResponseCode();
+                if (code < 200 || code >= 300) {
+                    throw new IllegalStateException("HTTP " + code);
+                }
+                String fname = name;
+                if (fname == null || fname.isEmpty()) {
+                    fname = parseFilename(conn.getHeaderField("Content-Disposition"));
+                }
+                if (fname == null || fname.isEmpty()) fname = guessName(abs);
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                try (InputStream in = conn.getInputStream()) {
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = in.read(buf)) != -1) bos.write(buf, 0, n);
+                }
+                conn.disconnect();
+                saveBytes(fname, bos.toByteArray());
+            } catch (Throwable t) {
+                runOnUiThread(() -> toast("导出失败: " + t.getMessage()));
+            }
+        }, "rincy-export").start();
+    }
+
+    private void saveBytes(String name, byte[] data) {
+        if (name == null || name.isEmpty()) name = "rincy-export.bin";
+        name = name.replace('/', '_').replace('\\', '_');
+        try {
+            File dir = null;
+            if (hasStoragePermission()) {
+                dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            }
+            if (dir == null || (!dir.isDirectory() && !dir.mkdirs())) {
+                dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+            }
+            if (dir == null) dir = getFilesDir();
+            File out = new File(dir, name);
+            try (OutputStream os = new FileOutputStream(out)) {
+                os.write(data);
+            }
+            final String path = out.getAbsolutePath();
+            runOnUiThread(() -> toast("已导出: " + path));
+        } catch (Throwable t) {
+            runOnUiThread(() -> toast("保存失败: " + t.getMessage()));
+        }
+    }
+
+    private boolean hasStoragePermission() {
+        return checkSelfPermission("android.permission.WRITE_EXTERNAL_STORAGE")
+            == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private static String parseFilename(String contentDisposition) {
+        if (contentDisposition == null) return null;
+        try {
+            Matcher m = Pattern
+                .compile("filename\\*?=(?:UTF-8'')?\"?([^\";]+)\"?", Pattern.CASE_INSENSITIVE)
+                .matcher(contentDisposition);
+            if (m.find()) return URLDecoder.decode(m.group(1), "UTF-8");
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static String guessName(String url) {
+        try {
+            String path = new URL(url).getPath();
+            int i = path.lastIndexOf('/');
+            if (i >= 0 && i + 1 < path.length()) return path.substring(i + 1);
+        } catch (Throwable ignored) {
+        }
+        return "rincy-export.tar";
     }
 
     private void showChatStatus(String title, String detail, boolean showRetry) {
@@ -243,8 +490,7 @@ public class RincyMainActivity extends Activity {
         findViewById(R.id.btnRestart).setOnClickListener(v -> startServer(true));
 
         findViewById(R.id.btnResetEnv).setOnClickListener(v -> confirmReset());
-        findViewById(R.id.btnUpgrade).setOnClickListener(v -> runUpgrade());
-n        findViewById(R.id.btnUpgrade).setOnClickListener(v -> runUpgrade());
+        btnUpgrade.setOnClickListener(v -> runUpgrade());
     }
 
     private void applyMode() {
@@ -460,9 +706,9 @@ n        findViewById(R.id.btnUpgrade).setOnClickListener(v -> runUpgrade());
         if (message == null) return;
         Toast.makeText(this, message, Toast.LENGTH_LONG).show();
     }
-}
 
-    // 升级功能：直接在源目录执行 git pull（需要设备已安装 git，且源自解包自带源码）
+
+    // 升级功能：直接在源目录执行 git pull
     private void runUpgrade() {
         if (working) return;
         working = true;
@@ -471,23 +717,16 @@ n        findViewById(R.id.btnUpgrade).setOnClickListener(v -> runUpgrade());
         new Thread(() -> {
             try {
                 String cmd = sourceUrl.equals("default") ? "git pull" : "git pull " + sourceUrl + " main";
-                java.lang.ProcessBuilder pb = new java.lang.ProcessBuilder(PREFIX + "/bin/sh", "-c",
+                java.lang.ProcessBuilder pb = new java.lang.ProcessBuilder(RincyServer.PREFIX + "/bin/sh", "-c",
                     "cd \"$HOME_DIR/rincy\" 2>/dev/null || cd \"$PAYLOAD/rincy\"; " + cmd);
                 pb.redirectErrorStream(true);
                 pb.environment().putAll(RincyServer.buildEnvironment(prefs.getPort()));
-                pb.environment().put("TERM", "xterm-256color");
                 java.lang.Process p = pb.start();
                 try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()))) {
-                    String line; while ((line = r.readLine()) != null) {
-                        System.out.println("[RINY-UPGRADE] " + line);
-                    }
+                    String line; while ((line = r.readLine()) != null) System.out.println("[UPGRADE] " + line);
                 }
                 p.waitFor();
-                runOnUiThread(() -> {
-                    working = false;
-                    refreshStatus();
-                    toast("升级已尝试，结果见启动日志");
-                });
+                runOnUiThread(() -> { working = false; refreshStatus(); toast("升级已尝试，结果见启动日志"); });
             } catch (Throwable t) {
                 runOnUiThread(() -> { working = false; refreshStatus(); toast("升级异常: " + t.getMessage()); });
             }
@@ -496,68 +735,15 @@ n        findViewById(R.id.btnUpgrade).setOnClickListener(v -> runUpgrade());
 
     private String getUpgradeUrl() {
         try {
-            RadioGroup group = findViewById(R.id.upgradeSourceGroup);
-            if (group != null) {
-                int id = group.getCheckedRadioButtonId();
+            if (upgradeSourceGroup != null) {
+                int id = upgradeSourceGroup.getCheckedRadioButtonId();
                 if (id == R.id.upgradeGitee) return "https://gitee.com/mc2049/Rincy.git";
-                if (id == R.id.upgradeCustom) {
-                    EditText urlInput = findViewById(R.id.upgradeUrlInput);
-                    if (urlInput != null) {
-                        String s = urlInput.getText().toString().trim();
-                        if (s.startsWith("https://") || s.startsWith("http://")) return s;
-                    }
-                }
-            }
-        } catch (Throwable ignored) {}
-        return "https://github.com/mc2049/Rincy.git";
-
-    // 升级功能：直接在源目录执行 git pull（需要设备已安装 git，且源自解包自带源码）
-    private void runUpgrade() {
-        if (working) return;
-        working = true;
-        refreshStatus();
-        final String sourceUrl = getUpgradeUrl();
-        new Thread(() -> {
-            try {
-                // 优先使用设备已安装的 git
-                String cmd = sourceUrl.equals("default") ? "git pull" : "git pull " + sourceUrl + " main";
-                java.lang.ProcessBuilder pb = new java.lang.ProcessBuilder(PREFIX + "/bin/sh", "-c", 
-                    "cd "$HOME_DIR/rincy" 2>/dev/null || cd "$PAYLOAD/rincy"; " + cmd);
-                pb.redirectErrorStream(true);
-                pb.environment().putAll(RincyServer.buildEnvironment(prefs.getPort()));
-                java.lang.Process p = pb.start();
-                try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()))) {
-                    String line; while ((line = r.readLine()) != null) {
-                        System.out.println("[RINY-UPGRADE] " + line);
-                    }
-                }
-                p.waitFor();
-                runOnUiThread(() -> {
-                    working = false;
-                    refreshStatus();
-                    toast("升级已尝试，结果见启动日志");
-                });
-            } catch (Throwable t) {
-                runOnUiThread(() -> { working = false; refreshStatus(); toast("升级异常: " + t.getMessage()); });
-            }
-        }, "rincy-upgrade").start();
-    }
-
-    private String getUpgradeUrl() {
-        try {
-            RadioGroup group = findViewById(R.id.upgradeSourceGroup);
-            if (group != null) {
-                int id = group.getCheckedRadioButtonId();
-                if (id == R.id.upgradeGitee) return "https://gitee.com/mc2049/Rincy.git";
-                if (id == R.id.upgradeCustom) {
-                    EditText urlInput = findViewById(R.id.upgradeUrlInput);
-                    if (urlInput != null) {
-                        String s = urlInput.getText().toString().trim();
-                        if (s.startsWith("https://") || s.startsWith("http://")) return s;
-                    }
+                if (id == R.id.upgradeCustom && upgradeUrlInput != null) {
+                    String s = upgradeUrlInput.getText().toString().trim();
+                    if (s.startsWith("https://") || s.startsWith("http://")) return s;
                 }
             }
         } catch (Throwable ignored) {}
         return "https://github.com/mc2049/Rincy.git";
     }
-    }
+}
