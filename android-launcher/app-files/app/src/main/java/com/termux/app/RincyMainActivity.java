@@ -98,6 +98,41 @@ public class RincyMainActivity extends Activity {
     private static final int REQ_FILE_CHOOSER = 1001;
     private static final int REQ_STORAGE = 1002;
     private ValueCallback<Uri[]> filePathCallback;
+    private boolean pageFailed = false;
+    private int retryCount = 0;
+    private static final int MAX_RETRY = 40;
+    private static final long RETRY_INTERVAL_MS = 1500L;
+
+    private final Runnable retryRunnable = new Runnable() {
+        @Override
+        public void run() {
+            retryCount++;
+            if (retryCount > MAX_RETRY) {
+                pageFailed = false;
+                retryCount = 0;
+                return;
+            }
+            if (isFinishing()) return;
+            final int port = prefs.getPort();
+            if (RincyServer.isServing(port)) {
+                retryCount = 0;
+                pageFailed = false;
+                loadChat(port);
+                return;
+            }
+            if (RincyServer.hasLiveProcess()) {
+                startServer(true);
+                return;
+            }
+            if (prefs.isAutostart()) {
+                startServer(false);
+                return;
+            }
+            // 仍未启动：让状态栏提示自行重试（已设置按钮），不再自动重试
+            pageFailed = false;
+            retryCount = 0;
+        }
+    };
 
     private final Runnable statusTick = new Runnable() {
         @Override
@@ -316,16 +351,21 @@ public class RincyMainActivity extends Activity {
         wv.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
+                pageFailed = false;
+                retryCount = 0;
+                handler.removeCallbacks(retryRunnable);
                 if (loadedPort > 0) hideChatStatus();
                 // 每次页面（重新）加载后都重新注入下载增强脚本
                 view.evaluateJavascript(JS_DOWNLOAD_SHIM, null);
             }
 
-            // 只认主文档失败；子资源（favicon 等）失败不能把整页判成打不开
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request != null && request.isForMainFrame()) {
-                    showChatStatus("无法连接 Rincy", "服务可能还没起来，稍等或点“重试”", true);
+                    pageFailed = true;
+                    retryCount = 0;
+                    scheduleRetry();
+                    showChatStatus("正在连接 Rincy…", "服务还没就绪，正在自动重试…", false);
                 }
             }
 
@@ -653,11 +693,14 @@ public class RincyMainActivity extends Activity {
 
     private void bootAfterInstall() {
         final int port = prefs.getPort();
-        // 服务是 setsid 脱离会话起的，上次退出后通常还在跑：直接用，别重启
         if (RincyServer.isServing(port)) {
             loadedPort = port;
             loadChat(port);
             refreshStatus();
+            return;
+        }
+        if (RincyServer.hasLiveProcess()) {
+            startServer(true);
             return;
         }
         if (prefs.isAutostart()) startServer(false);
@@ -738,6 +781,11 @@ public class RincyMainActivity extends Activity {
         lastLoadAt = System.currentTimeMillis();
         hideChatStatus();
         webView.loadUrl("http://127.0.0.1:" + port + "/");
+    }
+
+    private void scheduleRetry() {
+        handler.removeCallbacks(retryRunnable);
+        handler.postDelayed(retryRunnable, RETRY_INTERVAL_MS);
     }
 
     private void refreshStatus() {

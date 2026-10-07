@@ -31,7 +31,7 @@ LIBTERMUX_SO = os.environ.get("RINCY_LIBTERMUX_SO", "./libtermux.so")
 
 PKG_NAME = "com.rincy.launcher"
 APP_NAME = "Rincy"
-APP_VERSION = "0.2.4"
+APP_VERSION = "0.2.6"
 
 log = []
 
@@ -64,7 +64,7 @@ patch("app/build.gradle", [
     ('applicationId "com.termux"', 'applicationId "%s"' % PKG_NAME),
     # 用启动器自己的版本号（便于覆盖安装）
     ('        versionCode 1002\n        versionName "0.118.3"',
-     '        versionCode 2004\n        versionName "%s"' % APP_VERSION),
+     '        versionCode 2006\n        versionName "%s"' % APP_VERSION),
     ('TERMUX_PACKAGE_NAME = "com.termux"', 'TERMUX_PACKAGE_NAME = "%s"' % PKG_NAME),
     ('TERMUX_APP_NAME = "Termux"', 'TERMUX_APP_NAME = "%s"' % APP_NAME),
     ('TERMUX_API_APP_NAME = "Termux:API"', 'TERMUX_API_APP_NAME = "%s:API"' % APP_NAME),
@@ -210,6 +210,10 @@ if not copied:
 stale = os.path.join(TERMUX_DIR, "app/src/main/java/com/termux/app/RincyWebActivity.java")
 if os.path.exists(stale):
     os.remove(stale)
+# 图标前景改用 app-files 里的位图（黑底白 R），删掉 Termux 自带的矢量前景
+stale_fg = os.path.join(TERMUX_DIR, "app/src/main/res/drawable/ic_foreground.xml")
+if os.path.exists(stale_fg):
+    os.remove(stale_fg)
     log.append("删除 app/src/main/java/com/termux/app/RincyWebActivity.java")
 
 # ------------------------------------------------- 6. TermuxInstaller：改读 assets

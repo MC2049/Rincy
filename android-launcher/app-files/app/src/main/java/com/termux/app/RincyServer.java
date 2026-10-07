@@ -61,17 +61,35 @@ public final class RincyServer {
 
     /** 通过 TCP 连接判断服务是否在监听。 */
     public static boolean isServing(int port) {
-        try {
-            Socket socket = new Socket();
-            socket.connect(new InetSocketAddress("127.0.0.1", port), 1500); // 增加容忍（低端设备慢）
-            socket.close();
+        // 严格只认端口在监听；杜绝“进程活但端口没起来”假运行状态
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress("127.0.0.1", port), 1200);
             return true;
         } catch (Throwable t) {
-            // 端口暂时连不上：若服务进程仍活，视为运行中（避免刚启动显示"未运行"）
-            int pid = readPid();
-            if (pid > 0 && isAlive(pid)) return true;
             return false;
         }
+    }
+
+    /** 仅判断进程是否存活（与端口是否监听无关），用于检测卡死/残留。 */
+    public static boolean hasLiveProcess() {
+        int pid = readPid();
+        if (pid > 0 && isAlive(pid)) return true;
+        File proc = new File("/proc");
+        File[] entries = proc.listFiles();
+        if (entries != null) {
+            for (File entry : entries) {
+                if (!entry.isDirectory()) continue;
+                int candidate;
+                try {
+                    candidate = Integer.parseInt(entry.getName());
+                } catch (Throwable t) {
+                    continue;
+                }
+                if (candidate == Process.myPid()) continue;
+                if (isRincyServerProcess(candidate)) return true;
+            }
+        }
+        return false;
     }
 
     /** 触发 bootstrap 解包；已解包时 TermuxInstaller 会立即回调 whenDone。 */
