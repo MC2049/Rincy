@@ -132,18 +132,55 @@ public final class RincyUpgrade {
         if (!workDir.exists() && !workDir.mkdirs()) {
             throw new IOException("无法创建目录 " + workDir);
         }
-        File archive = new File(workDir, "rincy-src.tar.gz");
         File extractDir = new File(workDir, "extract");
 
         report(p, "正在连接 " + hostOf(result.archiveUrl) + " …", 0);
-        long bytes = download(result.archiveUrl, archive, p);
-        report(p, "下载完成（" + (bytes / 1024) + " KB），正在解压…", 40);
 
-        deleteRecursively(extractDir);
-        if (!extractDir.mkdirs()) throw new IOException("无法创建目录 " + extractDir);
-        int files = extractTarGz(archive, extractDir, 1, p);
-        if (files == 0) {
-            throw new IOException("归档里没有解出任何文件，可能源地址不对或仓库为空");
+        // 依次换 User-Agent 试：Gitee 的 WAF 只放行 curl/wget 这类 UA，
+        // 用浏览器或 Java 默认 UA 会拿到一个 HTML 拦截页（曾导致「不是 gzip 格式」）。
+        String problem = null;
+        int files = 0;
+        for (int i = 0; i < USER_AGENTS.length; i++) {
+            File archive = new File(workDir, "rincy-src." + i + ".bin");
+            long bytes;
+            String kind;
+            try {
+                bytes = download(result.archiveUrl, archive, USER_AGENTS[i], p);
+                kind = sniff(archive);
+            } catch (IOException e) {
+                problem = e.getMessage();
+                deleteRecursively(archive);
+                continue;
+            }
+            if (kind == null || "html".equals(kind)) {
+                problem = "源返回的是网页而不是压缩包（" + describe(archive)
+                    + "），可能是下载站点的拦截页";
+                deleteRecursively(archive);
+                report(p, "换一个请求方式重试…", -1);
+                continue;
+            }
+            report(p, "下载完成（" + (bytes / 1024) + " KB，" + kind + "），正在解压…", 40);
+            deleteRecursively(extractDir);
+            if (!extractDir.mkdirs()) throw new IOException("无法创建目录 " + extractDir);
+            int extracted = 0;
+            try {
+                extracted = extract(archive, extractDir, kind, p);
+            } catch (IOException extractErr) {
+                problem = "解压失败（" + extractErr.getMessage()
+                    + "）；文件头部可能已被下载站点截断或格式异常，尝试重试";
+                deleteRecursively(archive);
+                continue; // 换 UA 重试
+            }
+            deleteRecursively(archive);
+            if (extracted > 0) {
+                files = extracted;
+                problem = null;
+                break;
+            }
+            problem = "归档里没有解出任何文件，可能源地址不对或仓库为空";
+        }
+        if (problem != null || files == 0) {
+            throw new IOException(problem == null ? "升级失败：没有取到可用文件" : problem);
         }
 
         // 归档解出来通常是一层 Rincy-main/，保险起见再探测一次真正的根
@@ -159,27 +196,84 @@ public final class RincyUpgrade {
             // 没有任何文件被改写，不用留空备份目录
             deleteRecursively(backup);
         }
-        try {
-            archive.delete();
-        } catch (Throwable ignored) {
-        }
         report(p, result.summary(), 100);
         return result;
+    }
+
+    /** 读取文件头判断真实格式——不能信 Content-Type，Gitee 会返回 HTML 拦截页。 */
+    static String sniff(File f) {
+        try (InputStream in = new BufferedInputStream(new FileInputStream(f))) {
+            byte[] head = new byte[512];
+            int n = readAtMost(in, head, head.length);
+            if (n < 2) return null;
+            int b0 = head[0] & 0xFF, b1 = head[1] & 0xFF;
+            if (b0 == 0x1F && b1 == 0x8B) return "gzip";
+            if (b0 == 0x50 && b1 == 0x4B) return "zip";
+            if (b0 == 0x3C) return "html";                    // '<' —— HTML/XML
+            if (n >= 265 && head[257] == 'u' && head[258] == 's' && head[259] == 't'
+                && head[260] == 'a' && head[261] == 'r') return "tar";
+            return null;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** 出错时给用户看的前几个字节，便于判断究竟拿到了什么。 */
+    static String describe(File f) {
+        try (InputStream in = new BufferedInputStream(new FileInputStream(f))) {
+            byte[] head = new byte[24];
+            int n = readAtMost(in, head, head.length);
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < n && i < 12; i++) {
+                int c = head[i] & 0xFF;
+                sb.append(c >= 32 && c < 127 ? (char) c : '.');
+            }
+            return "开头是 \"" + sb + "\"";
+        } catch (Throwable t) {
+            return "格式未知";
+        }
+    }
+
+    static int extract(File archive, File destRoot, String kind, Progress p) throws IOException {
+        if ("zip".equals(kind)) return extractZip(archive, destRoot, 1, p);
+        if ("tar".equals(kind)) return extractTar(archive, destRoot, 1, p);
+        return extractTarGz(archive, destRoot, 1, p);
+    }
+
+    static int readAtMost(InputStream in, byte[] buf, int len) throws IOException {
+        int off = 0;
+        while (off < len) {
+            int n = in.read(buf, off, len - off);
+            if (n < 0) break;
+            off += n;
+        }
+        return off;
     }
 
     // ------------------------------------------------------------------
     // 下载
     // ------------------------------------------------------------------
 
-    private static long download(String url, File dest, Progress p) throws IOException {
+    /**
+     * Gitee 的 WAF 只放行 curl / wget 这类 UA；用 Java 默认 UA 会拿到 HTML 拦截页。
+     * 所以按顺序轮换，配合格式嗅探找到真正能用的那个。
+     */
+    private static final String[] USER_AGENTS = {
+        "curl/8.5.0",
+        "Wget/1.21",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    };
+
+    private static long download(String url, File dest, String userAgent, Progress p)
+        throws IOException {
         String current = url;
         for (int hop = 0; hop <= MAX_REDIRECT; hop++) {
             HttpURLConnection conn = (HttpURLConnection) new URL(current).openConnection();
             conn.setInstanceFollowRedirects(false);
             conn.setConnectTimeout(20000);
             conn.setReadTimeout(60000);
-            conn.setRequestProperty("User-Agent", "Rincy-Updater/1.0 (+android)");
-            conn.setRequestProperty("Accept", "application/gzip, application/octet-stream, */*");
+            conn.setRequestProperty("User-Agent", userAgent);
+            conn.setRequestProperty("Accept", "*/*");
             int code = conn.getResponseCode();
             if (code >= 300 && code < 400) {
                 String loc = conn.getHeaderField("Location");
@@ -238,10 +332,48 @@ public final class RincyUpgrade {
      * @return 实际写出的文件数
      */
     static int extractTarGz(File archive, File destRoot, int strip, Progress p) throws IOException {
-        int written = 0;
-        String paxPath = null;
         try (GZIPInputStream gz = new GZIPInputStream(
             new BufferedInputStream(new FileInputStream(archive), 1 << 16), 1 << 16)) {
+            return extractTarStream(gz, destRoot, strip, p);
+        }
+    }
+
+    static int extractTar(File archive, File destRoot, int strip, Progress p) throws IOException {
+        try (InputStream in = new BufferedInputStream(new FileInputStream(archive), 1 << 16)) {
+            return extractTarStream(in, destRoot, strip, p);
+        }
+    }
+
+    /** 解 zip 归档（有些源会直接给 zip）。 */
+    static int extractZip(File archive, File destRoot, int strip, Progress p) throws IOException {
+        int written = 0;
+        try (java.util.zip.ZipInputStream zin = new java.util.zip.ZipInputStream(
+            new BufferedInputStream(new FileInputStream(archive), 1 << 16))) {
+            java.util.zip.ZipEntry entry;
+            byte[] buf = new byte[1 << 16];
+            while ((entry = zin.getNextEntry()) != null) {
+                if (entry.isDirectory()) continue;
+                String rel = stripComponents(entry.getName(), strip);
+                if (rel == null || rel.length() == 0 || rel.startsWith("..")) continue;
+                File out = new File(destRoot, rel);
+                File parent = out.getParentFile();
+                if (parent != null) parent.mkdirs();
+                try (OutputStream os = new BufferedOutputStream(new FileOutputStream(out), 1 << 16)) {
+                    int n;
+                    while ((n = zin.read(buf)) > 0) os.write(buf, 0, n);
+                }
+                written++;
+                if (written % 25 == 0) report(p, "正在解压（已 " + written + " 个文件）…", -1);
+            }
+        }
+        return written;
+    }
+
+    static int extractTarStream(InputStream gz, File destRoot, int strip, Progress p)
+        throws IOException {
+        int written = 0;
+        String paxPath = null;
+        {
             byte[] hdr = new byte[TAR_BLOCK];
             while (true) {
                 if (!readFully(gz, hdr, TAR_BLOCK)) break;
