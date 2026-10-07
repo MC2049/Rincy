@@ -31,7 +31,7 @@ LIBTERMUX_SO = os.environ.get("RINCY_LIBTERMUX_SO", "./libtermux.so")
 
 PKG_NAME = "com.rincy.launcher"
 APP_NAME = "Rincy"
-APP_VERSION = "0.2.6"
+APP_VERSION = "0.2.7"
 
 log = []
 
@@ -64,7 +64,7 @@ patch("app/build.gradle", [
     ('applicationId "com.termux"', 'applicationId "%s"' % PKG_NAME),
     # 用启动器自己的版本号（便于覆盖安装）
     ('        versionCode 1002\n        versionName "0.118.3"',
-     '        versionCode 2006\n        versionName "%s"' % APP_VERSION),
+     '        versionCode 2007\n        versionName "%s"' % APP_VERSION),
     ('TERMUX_PACKAGE_NAME = "com.termux"', 'TERMUX_PACKAGE_NAME = "%s"' % PKG_NAME),
     ('TERMUX_APP_NAME = "Termux"', 'TERMUX_APP_NAME = "%s"' % APP_NAME),
     ('TERMUX_API_APP_NAME = "Termux:API"', 'TERMUX_API_APP_NAME = "%s:API"' % APP_NAME),
