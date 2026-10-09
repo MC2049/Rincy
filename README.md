@@ -248,9 +248,14 @@ Rincy 只对自己 UI 层的内容负责：不预置违法角色、不内置违�
 
 ## 许可证
 
-MIT License
 
-部分代码改编自 [OpenClaw](https://github.com/openclaw/openclaw)（MIT License，Copyright (c) 2026 OpenClaw Foundation）。相关文件顶部保留原始版权声明。
+本项目核心代码（src/、web/、scripts/）采用 MIT License。
+
+Android 启动器（android-launcher/）因为使用了 Termux（GPLv3）
+的代码和 bootstrap 包，采用 GPLv3。详见 LICENSE-GPL。
+
+两部分独立分发，互不影响。
+
 
 ---
 

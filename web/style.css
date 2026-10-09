@@ -20,16 +20,16 @@
   --radius-button: 18px;
   --radius-panel: 12px;
   --radius-small: 6px;
-  /* 字号：正文 15/26，小字 13/20，标题 18-20 */
-  --font-base: 15px;
-  --line-base: 26px;
-  --font-small: 13px;
-  --line-small: 20px;
-  --font-title: 18px;
-  /* 布局宽度 */
-  --menu-w-collapsed: 56px;
-  --menu-w-expanded: 240px;
-  --debug-w: 360px;
+  /* 字号：正文 15/26，小字 13/20，标题 18-20；适应不同屏幕 */
+  --font-base: clamp(14px, 1.0vw, 16px);
+  --line-base: clamp(24px, 1.8vw, 28px);
+  --font-small: clamp(12px, 0.85vw, 14px);
+  --line-small: clamp(18px, 1.4vw, 22px);
+  --font-title: clamp(17px, 1.4vw, 20px);
+  /* 布局宽度：随屏幕缩放，限制最小和最大 */
+  --menu-w-collapsed: clamp(48px, 5vw, 64px);
+  --menu-w-expanded: clamp(200px, 18vw, 260px);
+  --debug-w: clamp(320px, 26vw, 380px);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -279,6 +279,30 @@ dialog textarea { resize: vertical; }
   }
   /* 发送按钮在手机上收窄一点 */
   .pill-btn { padding: 0 14px; font-size: var(--font-small); }
+}
+
+/* ---------- 响应式：超小屏幕（< 480px） ---------- */
+@media (max-width: 479px) {
+  .app { grid-template-columns: 0px 1fr 0px; }
+  .app.menu-open { grid-template-columns: 0px 1fr 0px; }
+  .app.debug-open { grid-template-columns: 0px 1fr 0px; }
+  .menu, .debug { width: 80vw; max-width: 280px; min-width: 0; }
+  .chat { padding: 8px; }
+  .chat-head { padding: 8px; }
+  .chat-messages { padding: 8px; }
+  .pill-btn { padding: 6px 12px; font-size: var(--font-small); }
+}
+
+/* ---------- 响应式：大屏幕（> 1440px）— 让内容更舒适 ---------- */
+@media (min-width: 1441px) {
+  :root {
+    --font-base: 16.5px;
+    --line-base: 28px;
+    --font-title: 20px;
+  }
+  .chat { padding: 20px 24px; }
+  .chat-messages { padding: 20px 24px; gap: 14px; }
+  .bubble { max-width: 72%; padding: 12px 18px; }
 }
 
 /* 文字配置：保存成功的小提示（字段旁闪一下"已保存"） */

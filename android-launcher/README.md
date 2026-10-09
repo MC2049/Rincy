@@ -222,3 +222,18 @@ cat /data/data/com.rincy.launcher/files/home/rincy-boot.log
 本启动器是 [termux-app](https://github.com/termux/termux-app)（GPLv3）的衍生作品，
 同样以 GPLv3 发布；已按上游文档要求完成包名/应用名替换，未使用 Termux 商标。
 内置组件：Termux bootstrap（GPLv3 等）、Node.js（MIT）、Rincy（本仓库）。
+
+---
+
+## 许可证
+
+本启动器（`android-launcher/`）基于 [termux-app](https://github.com/termux/termux-app)
+（GPLv3）构建，采用 **GPLv3** 发布。内置的 bootstrap（`assets/bootstrap-aarch64.zip`）
+和预编译库（`libtermux.so`）均来自 Termux 官方发布（GPLv3 等）。
+
+- 完整 GPLv3 许可证：见仓库根目录 `LICENSE-GPL`
+- 本目录许可证摘要：`android-launcher/LICENSE`
+- Termux 官方源码：`https://github.com/termux/termux-packages`
+
+本启动器与上游 Termux 使用不同包名（`com.rincy.launcher`），
+已按 GPLv3 要求保留原始版权声明并做必要替换。
