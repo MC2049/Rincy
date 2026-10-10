@@ -196,8 +196,44 @@ public final class RincyUpgrade {
             // 没有任何文件被改写，不用留空备份目录
             deleteRecursively(backup);
         }
+        
+        // 升级后自动清理旧备份，保留最近 5 个
+        cleanupBackups(workDir, 5);
+        
         report(p, result.summary(), 100);
         return result;
+    }
+    
+    /**
+     * 删除旧版本的备份，保留最近 N 个备份。
+     * @param workDir 当前工作目录
+     * @param keepCount 保留最近多少个备份
+     * @return 保留下来的备份数量
+     */
+    public static int cleanupBackups(File workDir, int keepCount) {
+        // 直接在 workDir 下查找 backup-{timestamp} 目录
+        File[] backups = workDir.listFiles((dir, name) -> name.matches("backup-\\d+"));
+        if (backups == null || backups.length == 0) return 0;
+        
+        // 按时间戳排序（新到旧）
+        java.util.Arrays.sort(backups, (a, b) -> Long.compare(
+            Long.parseLong(a.getName().replace("backup-", "")),
+            Long.parseLong(b.getName().replace("backup-", ""))));
+        
+        // 保留最新的 keepCount 个，删除其余
+        int total = backups.length;
+        int toDelete = Math.max(0, total - keepCount);
+        for (int i = 0; i < toDelete; i++) {
+            File file = backups[i];
+            try {
+                if (!file.delete()) {
+                    // 如果删除失败，尝试删除其子文件
+                    deleteRecursively(file);
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return total - toDelete;
     }
 
     /** 读取文件头判断真实格式——不能信 Content-Type，Gitee 会返回 HTML 拦截页。 */

@@ -92,6 +92,7 @@ public class RincyMainActivity extends Activity {
 
     private int currentTab = TAB_CHAT;
     private boolean working = false;
+    private boolean upgrading = false;
     private int loadedPort = -1;
     private long lastLoadAt = 0L;
 
@@ -156,6 +157,7 @@ public class RincyMainActivity extends Activity {
         refreshStatus();
         handler.postDelayed(statusTick, 2500);
         boot();
+        handleIncomingIntent(getIntent());
     }
 
     @Override
@@ -183,6 +185,152 @@ public class RincyMainActivity extends Activity {
         setIntent(intent);
         refreshStatus();
         ensureChatLoaded();
+        handleIncomingIntent(intent);
+    }
+
+    // ------------------------------------------------------------------ 打开 / 分享 tar 归档
+
+    /**
+     * 处理「用 Rincy 打开」与「分享到 Rincy」两种入口。
+     *
+     * <p>系统把 tar / tar.gz 这类文件交给本应用时，并不代表用户已经同意导入，
+     * 所以这里只负责弹一个确认框，确认后才真正上传给服务端解包。
+     */
+    private void handleIncomingIntent(Intent intent) {
+        if (intent == null) return;
+        String action = intent.getAction();
+        Uri uri = null;
+        if (Intent.ACTION_VIEW.equals(action)) {
+            uri = intent.getData();
+        } else if (Intent.ACTION_SEND.equals(action)) {
+            uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+        }
+        if (uri == null) return;
+
+        // 把 action 清掉表示「已消费」：旋转屏幕重进 onCreate 不会再弹一次，
+        // 而用户重新分享同一个文件时系统给的是新 Intent，仍然会弹窗。
+        intent.setAction(null);
+
+        final Uri fileUri = uri;
+        final String name = displayNameOf(fileUri);
+        new AlertDialog.Builder(this)
+            .setTitle("导入智能体")
+            .setMessage("要导入这个文件里的智能体吗？\n\n" + name
+                + "\n\n导入后，同名的智能体会被文件里的版本覆盖。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("导入", (dialog, which) -> doImportAgent(fileUri))
+            .show();
+    }
+
+    /** 从 content:// 或 file:// URI 取一个能显示给用户看的文件名。 */
+    private String displayNameOf(Uri uri) {
+        String name = null;
+        try (android.database.Cursor c = getContentResolver().query(uri, null, null, null, null)) {
+            if (c != null && c.moveToFirst()) {
+                int idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                if (idx >= 0 && !c.isNull(idx)) name = c.getString(idx);
+            }
+        } catch (Throwable ignored) {
+        }
+        if (name == null) name = uri.getLastPathSegment();
+        return name == null || name.isEmpty() ? "归档文件" : name;
+    }
+
+    private void doImportAgent(final Uri uri) {
+        final String name = displayNameOf(uri);
+        selectTab(TAB_CHAT);
+        showChatStatus("正在导入智能体…", name, false);
+
+        new Thread(() -> {
+            String error = null;
+            int imported = 0;
+            try {
+                int port = prefs.getPort();
+                // 服务没起来就先拉起来，否则这次导入必然失败
+                if (!RincyServer.isServing(port)) {
+                    RincyServer.stop();
+                    RincyServer.start(port);
+                    if (!waitForPort(port, 40000)) {
+                        throw new IllegalStateException("Rincy 服务未能启动，请到设置里手动启动后重试");
+                    }
+                }
+                imported = postImport(port, uri, name);
+            } catch (Throwable t) {
+                error = t.getMessage() == null ? t.toString() : t.getMessage();
+            }
+            final String err = error;
+            final int count = imported;
+            runOnUiThread(() -> {
+                hideChatStatus();
+                if (err != null) {
+                    toast("导入失败：" + err);
+                } else {
+                    toast("已导入 " + count + " 个智能体");
+                    // 让网页刷新一下，新导入的智能体立刻出现在列表里
+                    if (webView != null) webView.reload();
+                }
+            });
+        }, "rincy-import").start();
+    }
+
+    /** 以 multipart/form-data 把归档 POST 给 /api/agents/import。 */
+    private int postImport(int port, Uri uri, String name) throws Exception {
+        String boundary = "----RincyBoundary" + System.currentTimeMillis();
+        HttpURLConnection conn = (HttpURLConnection) new URL(
+            "http://127.0.0.1:" + port + "/api/agents/import").openConnection();
+        conn.setRequestMethod("POST");
+        conn.setDoOutput(true);
+        conn.setConnectTimeout(10000);
+        conn.setReadTimeout(120000);
+        conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+
+        try (InputStream in = getContentResolver().openInputStream(uri);
+             OutputStream out = conn.getOutputStream()) {
+            if (in == null) throw new IllegalStateException("无法读取所选文件");
+            // 文件名来自其它应用，去掉引号与换行，避免破坏 multipart 头
+            String safeName = name == null ? "import.tar" : name.replaceAll("[\"\\r\\n]", "_");
+            String head = "--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"file\"; filename=\"" + safeName + "\"\r\n"
+                + "Content-Type: application/x-tar\r\n\r\n";
+            out.write(head.getBytes("UTF-8"));
+            byte[] buf = new byte[1 << 16];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            out.write(("\r\n--" + boundary + "--\r\n").getBytes("UTF-8"));
+            out.flush();
+        }
+
+        int code = conn.getResponseCode();
+        InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
+        StringBuilder body = new StringBuilder();
+        if (is != null) {
+            try (InputStream src = is) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = src.read(buf)) > 0) body.append(new String(buf, 0, n, "UTF-8"));
+            }
+        }
+        conn.disconnect();
+
+        String text = body.toString().trim();
+        if (code < 200 || code >= 300) {
+            throw new IllegalStateException(jsonError(text, "HTTP " + code));
+        }
+        try {
+            return new org.json.JSONObject(text).optInt("imported", 0);
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+    /** 服务端的错误信息在 {"error": "..."} 里，取出来给用户看。 */
+    private static String jsonError(String text, String fallback) {
+        try {
+            String e = new org.json.JSONObject(text).optString("error", "");
+            if (!e.isEmpty()) return e;
+        } catch (Throwable ignored) {
+        }
+        return text.isEmpty() ? fallback : text;
     }
 
     @Override
@@ -625,10 +773,27 @@ public class RincyMainActivity extends Activity {
 
         findViewById(R.id.btnViewLog).setOnClickListener(v -> showLog());
 
+        findViewById(R.id.btnCleanupBackups).setOnClickListener(v -> cleanupOldBackups());
+
         findViewById(R.id.btnRestart).setOnClickListener(v -> startServer(true));
 
         findViewById(R.id.btnResetEnv).setOnClickListener(v -> confirmReset());
         btnUpgrade.setOnClickListener(v -> runUpgrade());
+    }
+
+    private void cleanupOldBackups() {
+        if (working) return;
+        working = true;
+        refreshStatus();
+        new Thread(() -> {
+            int kept = RincyUpgrade.cleanupBackups(
+                new java.io.File(RincyServer.HOME, "rincy-upgrade"), 5);
+            int total = kept;
+            runOnUiThread(() -> {
+                working = false;
+                toast("备份清理完成，保留 " + kept + " 个");
+            });
+        }, "rincy-cleanup").start();
     }
 
     private void applyMode() {
@@ -878,29 +1043,61 @@ public class RincyMainActivity extends Activity {
     }
 
 
-    // 升级功能：直接在源目录执行 git pull
+    /**
+     * 升级：从选定的源下载源码归档，覆盖设备上的运行目录。
+     *
+     * 之前这里是 `git pull`，但随包载荷里既没有 git，home/rincy 也不是 git 仓库，
+     * 命令必然失败；而且失败信息只写进 logcat，界面什么都不显示，看起来就是
+     * 「点了没反应」。现在改成 HTTP 拉归档，并且每一步都回写到界面上。
+     */
     private void runUpgrade() {
-        if (working) return;
-        working = true;
-        refreshStatus();
+        if (upgrading) {
+            toast("正在升级中，请稍候…");
+            return;
+        }
         final String sourceUrl = getUpgradeUrl();
+        final String target = RincyServer.SOURCE_DIR;
+
+        upgrading = true;
+        if (btnUpgrade != null) btnUpgrade.setEnabled(false);
+        setUpgradeStatus("准备升级…\n源: " + sourceUrl + "\n目标: " + target);
+        toast("开始升级…");
+
         new Thread(() -> {
             try {
-                String cmd = sourceUrl.equals("default") ? "git pull" : "git pull " + sourceUrl + " main";
-                java.lang.ProcessBuilder pb = new java.lang.ProcessBuilder(RincyServer.PREFIX + "/bin/sh", "-c",
-                    "cd \"$HOME_DIR/rincy\" 2>/dev/null || cd \"$PAYLOAD/rincy\"; " + cmd);
-                pb.redirectErrorStream(true);
-                pb.environment().putAll(RincyServer.buildEnvironment(prefs.getPort()));
-                java.lang.Process p = pb.start();
-                try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()))) {
-                    String line; while ((line = r.readLine()) != null) System.out.println("[UPGRADE] " + line);
-                }
-                p.waitFor();
-                runOnUiThread(() -> { working = false; refreshStatus(); toast("升级已尝试，结果见启动日志"); });
+                java.io.File work = new java.io.File(RincyServer.HOME, "rincy-upgrade");
+                RincyUpgrade.Result r = RincyUpgrade.run(work, new java.io.File(target), sourceUrl,
+                    (text, percent) -> runOnUiThread(() ->
+                        setUpgradeStatus(text + (percent >= 0 ? "（" + percent + "%）" : ""))));
+
+                runOnUiThread(() -> {
+                    upgrading = false;
+                    if (btnUpgrade != null) btnUpgrade.setEnabled(true);
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("✅ ").append(r.summary()).append('\n');
+                    sb.append("源: ").append(r.archiveUrl);
+                    if (r.backupPath != null && !r.backupPath.isEmpty()) {
+                        sb.append('\n').append("旧文件备份: ").append(r.backupPath);
+                    }
+                    setUpgradeStatus(sb.toString());
+                    toast("升级完成：" + r.summary());
+                    // 覆盖的是服务端代码，重启一次才会生效
+                    if (r.updated > 0 || r.added > 0) startServer(true);
+                });
             } catch (Throwable t) {
-                runOnUiThread(() -> { working = false; refreshStatus(); toast("升级异常: " + t.getMessage()); });
+                String msg = t.getMessage() == null ? t.toString() : t.getMessage();
+                runOnUiThread(() -> {
+                    upgrading = false;
+                    if (btnUpgrade != null) btnUpgrade.setEnabled(true);
+                    setUpgradeStatus("❌ 升级失败：" + msg + "\n源: " + sourceUrl);
+                    toast("升级失败：" + msg);
+                });
             }
         }, "rincy-upgrade").start();
+    }
+
+    private void setUpgradeStatus(final String text) {
+        if (upgradeStatusText != null) upgradeStatusText.setText(text);
     }
 
     private String getUpgradeUrl() {
@@ -910,10 +1107,12 @@ public class RincyMainActivity extends Activity {
                 if (id == R.id.upgradeGitee) return "https://gitee.com/mc2049/Rincy.git";
                 if (id == R.id.upgradeCustom && upgradeUrlInput != null) {
                     String s = upgradeUrlInput.getText().toString().trim();
-                    if (s.startsWith("https://") || s.startsWith("http://")) return s;
+                    // 非空就用它（仓库地址或直接的归档地址都交给 RincyUpgrade 规范化）
+                    if (!s.isEmpty()) return s;
                 }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
         return "https://github.com/mc2049/Rincy.git";
     }
 }

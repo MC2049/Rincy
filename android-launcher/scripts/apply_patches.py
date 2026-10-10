@@ -31,7 +31,7 @@ LIBTERMUX_SO = os.environ.get("RINCY_LIBTERMUX_SO", "./libtermux.so")
 
 PKG_NAME = "com.rincy.launcher"
 APP_NAME = "Rincy"
-APP_VERSION = "0.2.7"
+APP_VERSION = "0.2.8"
 
 log = []
 
@@ -64,7 +64,7 @@ patch("app/build.gradle", [
     ('applicationId "com.termux"', 'applicationId "%s"' % PKG_NAME),
     # 用启动器自己的版本号（便于覆盖安装）
     ('        versionCode 1002\n        versionName "0.118.3"',
-     '        versionCode 2007\n        versionName "%s"' % APP_VERSION),
+     '        versionCode 2008\n        versionName "%s"' % APP_VERSION),
     ('TERMUX_PACKAGE_NAME = "com.termux"', 'TERMUX_PACKAGE_NAME = "%s"' % PKG_NAME),
     ('TERMUX_APP_NAME = "Termux"', 'TERMUX_APP_NAME = "%s"' % APP_NAME),
     ('TERMUX_API_APP_NAME = "Termux:API"', 'TERMUX_API_APP_NAME = "%s:API"' % APP_NAME),
@@ -73,6 +73,20 @@ patch("app/build.gradle", [
     ('TERMUX_STYLING_APP_NAME = "Termux:Styling"', 'TERMUX_STYLING_APP_NAME = "%s:Styling"' % APP_NAME),
     ('TERMUX_TASKER_APP_NAME = "Termux:Tasker"', 'TERMUX_TASKER_APP_NAME = "%s:Tasker"' % APP_NAME),
     ('TERMUX_WIDGET_APP_NAME = "Termux:Widget"', 'TERMUX_WIDGET_APP_NAME = "%s:Widget"' % APP_NAME),
+    # Rincy: 允许只打一个 arm64 单包（其余 ABI 本来就跑不了 aarch64 bootstrap）
+    ('    def splitAPKsForReleaseBuilds = System.getenv("TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS") ?: "0" // F-Droid does not support split APKs #1904\n',
+     '    def splitAPKsForReleaseBuilds = System.getenv("TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS") ?: "0" // F-Droid does not support split APKs #1904\n'
+     '    // Rincy: 设 RINCY_ARM64_ONLY=1 就只产出 arm64-v8a 单包（不生成 universal）\n'
+     '    def rincyArm64Only = System.getenv("RINCY_ARM64_ONLY") == "1"\n'),
+    ("""                include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
+                universalApk true""",
+     """                if (rincyArm64Only) {
+                    include 'arm64-v8a'
+                    universalApk false
+                } else {
+                    include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
+                    universalApk true
+                }"""),
     # 不再用 ndkBuild 把 bootstrap 编进 .so；改为 assets
     ('''        externalNativeBuild {
             ndkBuild {
@@ -177,12 +191,25 @@ if ".app.RincyMainActivity" not in manifest:
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
-                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+            <!-- 用 Rincy 打开 / 分享 tar 归档 → 弹窗确认后导入智能体 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.SEND" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="application/x-tar" />
+                <data android:mimeType="application/gzip" />
+                <data android:mimeType="application/zstd" />
             </intent-filter>
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
+                <action android:name="android.intent.action.SEND" />
 
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
 

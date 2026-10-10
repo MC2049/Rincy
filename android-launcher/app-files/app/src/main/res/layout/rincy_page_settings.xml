@@ -191,6 +191,12 @@
                 </LinearLayout>
             </RadioGroup>
             <Button android:id="@+id/btnUpgrade" style="@style/RincyPrimaryButton" android:text="执行升级" android:layout_marginTop="8dp" />
+            <Button
+                android:id="@+id/btnCleanupBackups"
+                style="@style/RincyGhostButton"
+                android:text="清理旧备份（保留最近 5 个）"
+                android:layout_marginTop="10dp"
+                android:textColor="@color/rincy_text" />
             <TextView android:id="@+id/upgradeStatusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/rincy_muted" android:textSize="12sp" android:layout_marginTop="6dp" />
         </LinearLayout>
 </LinearLayout>
