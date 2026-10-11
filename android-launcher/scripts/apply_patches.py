@@ -73,20 +73,18 @@ patch("app/build.gradle", [
     ('TERMUX_STYLING_APP_NAME = "Termux:Styling"', 'TERMUX_STYLING_APP_NAME = "%s:Styling"' % APP_NAME),
     ('TERMUX_TASKER_APP_NAME = "Termux:Tasker"', 'TERMUX_TASKER_APP_NAME = "%s:Tasker"' % APP_NAME),
     ('TERMUX_WIDGET_APP_NAME = "Termux:Widget"', 'TERMUX_WIDGET_APP_NAME = "%s:Widget"' % APP_NAME),
-    # Rincy: 允许只打一个 arm64 单包（其余 ABI 本来就跑不了 aarch64 bootstrap）
-    ('    def splitAPKsForReleaseBuilds = System.getenv("TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS") ?: "0" // F-Droid does not support split APKs #1904\n',
-     '    def splitAPKsForReleaseBuilds = System.getenv("TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS") ?: "0" // F-Droid does not support split APKs #1904\n'
-     '    // Rincy: 设 RINCY_ARM64_ONLY=1 就只产出 arm64-v8a 单包（不生成 universal）\n'
-     '    def rincyArm64Only = System.getenv("RINCY_ARM64_ONLY") == "1"\n'),
-    ("""                include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
-                universalApk true""",
-     """                if (rincyArm64Only) {
-                    include 'arm64-v8a'
-                    universalApk false
-                } else {
-                    include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
-                    universalApk true
-                }"""),
+    # Rincy: 载荷只有 aarch64 一套，分包没有意义——拆掉上游 splits，只出单个 universal APK
+    ("""        splits {
+            abi {
+                enable ((gradle.startParameter.taskNames.any { it.contains("Debug") } && splitAPKsForDebugBuilds == "1") ||
+                    (gradle.startParameter.taskNames.any { it.contains("Release") } && splitAPKsForReleaseBuilds == "1"))
+                reset ()
+                include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
+                universalApk true
+            }
+        }""",
+     "        // Rincy: 载荷只有 aarch64 一套，分包没有意义——只出单个 universal APK"
+     "（applicationVariants 里 abi 为空时自动命名 *_universal.apk）"),
     # 不再用 ndkBuild 把 bootstrap 编进 .so；改为 assets
     ('''        externalNativeBuild {
             ndkBuild {
