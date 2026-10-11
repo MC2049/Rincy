@@ -235,6 +235,11 @@ body {
 dialog {
   border: 1px solid var(--border-medium); border-radius: var(--radius-panel);
   padding: 18px; max-width: 420px; width: 88%;
+  /* 高度也锁死：最多占视口 88%，超出在框内滚，不顶出屏幕、不带动背景 */
+  max-height: 88vh;                 /* 老内核兜底 */
+  max-height: 88dvh;                /* 动态视口：软键盘弹出也不会被顶出去 */
+  overflow-y: auto;
+  overscroll-behavior: contain;     /* 滚到头就停，不把滚动链给背景页 */
   font-size: var(--font-base); line-height: var(--line-base); color: var(--label-primary);
 }
 dialog::backdrop { background: rgba(0,0,0,.25); }
