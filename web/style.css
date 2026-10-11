@@ -109,6 +109,8 @@ body {
 
 /* ---------- 对话屏（中，主屏，永远展开） ---------- */
 .chat { display: flex; flex-direction: column; min-width: 0; background: var(--bg-base); }
+/* 头部与输入行钉死不参与伸缩：空间再紧也只有消息区滚，输入框永远在底部 */
+.chat-head, .chat-input-row { flex: none; }
 .chat-head {
   display: flex; align-items: center; gap: 10px; padding: 10px 14px;
   border-bottom: 1px solid var(--border-light);
