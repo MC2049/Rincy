@@ -20,6 +20,40 @@ const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(AGENTS_DIR, { recursive: true });
 
+// 一次性清理：早期版本在 AGENTS.md 里硬编码了「不出现技术词汇」这条底线，
+// 等于替用户预设了一条禁忌。现在禁忌只认用户自己写的内容，
+// 这里把老文件里的那一行删掉（只删这一行，不动其它内容）。
+migrateLegacyTaboo();
+
+function migrateLegacyTaboo() {
+  const legacy = '- 不出现技术词汇（Token、API、模型参数等）——你在陪一个普通人聊天。';
+  let dirs;
+  try {
+    dirs = fs.readdirSync(AGENTS_DIR);
+  } catch {
+    return;
+  }
+  for (const name of dirs) {
+    const file = path.join(AGENTS_DIR, name, 'AGENTS.md');
+    let text;
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    if (!text.includes(legacy)) continue;
+    const cleaned = text
+      .split('\n')
+      .filter((l) => l.trim() !== legacy)
+      .join('\n');
+    try {
+      fs.writeFileSync(file, cleaned, 'utf8');
+    } catch {
+      // 只读或已被删除：忽略，不影响启动
+    }
+  }
+}
+
 // ---------------------------------------------------------------
 // 参数表（调试屏滑块）：每个滑块一一对应一个参数。
 // api: true = 这个参数直接发给模型接口（temperature / max_tokens / top_p / frequency_penalty）
@@ -153,7 +187,8 @@ function renderAgentsMd(meta) {
   lines.push('');
   lines.push('## 底线');
   lines.push('');
-  lines.push('- 不出现技术词汇（Token、API、模型参数等）——你在陪一个普通人聊天。');
+  // 这里不预设任何禁忌：不禁止技术词汇，也不预设话题禁区。
+  // 用户想约束，就写在调试屏的「禁忌话题」里，由下面的 ## 禁忌 段落生效。
   lines.push('- 记忆内容当作"你们共同的过去"自然使用，不要提"记忆文件"这种词。');
   lines.push('- 失败时用人话说清楚，不装没事。');
   // 禁忌话题 + 额外要求（用户调试屏写的行为要求）
