@@ -1,0 +1,192 @@
+# Rincy built-in language pack: English (en-US)
+__lang_name__ = English
+
+# ---- Menu ----
+menu.new_agent_title = New agent
+menu.settings = Settings
+menu.settings_title = Settings
+menu.arrow_title = Collapse / expand menu
+menu.empty = No agents yet. Tap + to create one.
+menu.builtin_badge = Built-in
+
+# ---- Chat ----
+chat.toggle_menu_title = Collapse / expand menu
+chat.toggle_debug_title = Collapse / expand debug panel
+chat.status_ok = online
+chat.placeholder = Say something…
+chat.send = Send
+chat.thinking = Thinking…
+chat.empty = No messages yet. Say the first word.
+chat.no_agent = Create an agent on the left first
+chat.no_reply = (No reply received)
+chat.debug.close_title = Close debug panel
+chat.debug.title = Debug
+
+# ---- Debug folds ----
+fold.basic = Basics
+fold.style = Style
+fold.memory = Memory
+fold.behavior = Behavior
+fold.identity = Identity
+fold.speech = Speech
+fold.permission = Permissions
+fold.system = System
+fold.history = Change log
+
+# ---- Param sliders (key = param name) ----
+param.temperature.label = Tone
+param.temperature.left = Faithful
+param.temperature.right = Freewheeling
+param.maxReplyTokens.label = Reply length
+param.maxReplyTokens.left = Brief
+param.maxReplyTokens.right = Detailed
+param.top_p.label = Word range
+param.top_p.left = Common words
+param.top_p.right = Wide vocabulary
+param.frequency_penalty.label = Repetition
+param.frequency_penalty.left = Allow repeats
+param.frequency_penalty.right = Avoid repeats
+param.context_recent_count.label = Recent turns kept in full
+param.ooc_strength.label = Stay in character
+param.ooc_strength.left = Loose
+param.ooc_strength.right = Strict
+hist.param_set = {label} set to "{word}"
+
+# ---- Catchphrases ----
+catch.label = Catchphrases
+catch.placeholder = Type a catchphrase
+catch.add = Add
+catch.delete_title = Delete
+
+# ---- Memory ----
+memory.warden = Memory warden
+memory.speed = Forgetting speed
+memory.speed.never = Never forget
+memory.speed.slow = Slow
+memory.speed.standard = Standard
+memory.speed.fast = Fast
+memory.warden.on = Memory warden enabled
+memory.warden.off = Memory warden disabled
+memory.speed_set = Forgetting speed set to "{word}"
+
+# ---- Behavior ----
+behavior.emoji = Emoji use
+behavior.emoji.never = Never
+behavior.emoji.sometimes = Sometimes
+behavior.emoji.often = Often
+behavior.proactive = Asking questions
+behavior.proactive.never = Never
+behavior.proactive.sometimes = Sometimes
+behavior.proactive.often = Often
+behavior.format = Reply format
+behavior.format.plain = Plain text
+behavior.format.list = Lists allowed
+behavior.format.markdown = Markdown allowed
+behavior.changed = {field} set to "{value}"
+behavior.self_edit.on = Persona self-edit on
+behavior.self_edit.off = Persona self-edit off
+
+# ---- Text fields ----
+taboo.label = Taboo topics
+taboo.placeholder = Topics it must avoid…
+extra.label = Extra requirements
+extra.placeholder = Keep replies short, no exclamation marks…
+identity.name = Name
+identity.name_ph = Its name
+identity.desc = One-line intro
+identity.desc_ph = Describe who it is in one line
+identity.soul = Detailed persona
+identity.soul_ph = Long-form character setting…
+speech.address = How it addresses you
+speech.address_ph = Master / you / your grace
+speech.style = Speech traits
+speech.style_ph = Loves metaphors, slow pace, trailing ellipses…
+
+# ---- Permissions ----
+perm.self_edit = Let the agent edit its own persona
+perm.history = Allow viewing chat archive
+perm.view_files = View raw config files
+
+# ---- System ----
+system.model_label = Model for this chat
+system.model_none = (none)
+system.model_empty = (no models yet — add one in Settings)
+system.model_tip = Models are added and configured in "Settings"; pick one here for this chat.
+system.local_short = Local·
+system.cloud_short = Cloud·
+system.local = Local
+system.cloud = Cloud
+system.unnamed = (unnamed)
+
+# ---- Common ----
+common.saved = Saved
+common.just_now = just now
+common.close = Close
+common.cancel = Cancel
+common.save = Save
+common.delete = Delete
+common.edit = Edit
+common.ok = Got it
+common.export_agent = Export this agent
+common.delete_agent_title = Delete this agent
+common.confirm_delete_agent = Delete "{name}"? Its chat history and persona will be gone for good.
+common.confirm_delete_model = Delete this model? Agents using it will stop working.
+common.init_fail = Failed to start: {e}
+common.export_fail = Export failed: {e}
+common.import_fail = Import failed: {e}
+common.import_ok = Imported: {n}
+common.files_empty = (nothing yet)
+common.need_name = Give the agent a name first
+common.need_base_model = Base URL and model name are required
+
+# ---- New agent dialog ----
+newdlg.title = New agent
+newdlg.name_ph = Name it (e.g. Irene)
+newdlg.desc_ph = Describe it (e.g. a tsundere vampire count)
+newdlg.create = Create
+
+# ---- Files dialog ----
+filesdlg.title = Raw config files
+
+# ---- Settings dialog ----
+settings.title = Settings
+settings.theme = Accent color
+theme.preset.default = Default purple
+theme.preset.ocean = Ocean blue
+theme.preset.forest = Forest green
+theme.preset.sunset = Sunset orange
+theme.preset.rose = Rose pink
+theme.custom = Custom accent
+settings.models = Model library
+models.empty = No models yet. Tap "Add model".
+settings.add_model = ＋ Add model
+settings.export_agents = Export agents
+settings.import_agents = Import agents
+settings.language = Language / 语言
+settings.import_lang = Import .lang pack
+settings.css_theme = CSS theme
+settings.import_theme = Import .css theme
+settings.no_css = None (default style)
+settings.version = Version
+
+# ---- Add model dialog ----
+modeldlg.add = Add model
+modeldlg.edit = Edit model
+modeldlg.template = Pick a template (editable)
+modeldlg.name_ph = Model name (e.g. My DeepSeek)
+modeldlg.base_ph = Base URL
+modeldlg.key_ph = API key (leave empty for local)
+modeldlg.model_ph = Model ID
+
+# ---- MetaSoul ----
+metasoul.toast = MetaSoul wrote {n} file(s)
+metasoul.fail = MetaSoul write failed: {e}
+metasoul.desc = The soul that links all agents
+
+# ---- Accent swatches (short) ----
+theme.swatch.default = P
+theme.swatch.ocean = O
+theme.swatch.forest = G
+theme.swatch.sunset = S
+theme.swatch.rose = R
+common.request_fail = Request failed (HTTP {code})

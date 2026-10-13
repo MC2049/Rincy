@@ -8,6 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const metasoul = require('./metasoul');
 
 // 数据目录：可用 RINCY_DATA_DIR 指定（Android 启动器借此把数据放在私有 home 下，重置运行环境不丢）
 const DATA_DIR = process.env.RINCY_DATA_DIR
@@ -236,7 +237,10 @@ function createAgent({ name, description }) {
   if (!name || !String(name).trim()) throw new Error('智能体的名字不能为空');
   const now = new Date();
   const pad = (n) => String(n).padStart(2, '0');
-  const id = `agent-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const base = `agent-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  // 同一秒创建多个智能体会撞 id → 相互覆盖甚至连带误删。目录已存在就加序号，保证唯一。
+  let id = base;
+  for (let n = 2; fs.existsSync(path.join(AGENTS_DIR, id)); n++) id = base + '-' + n;
   const meta = {
     id,
     name: String(name).trim(),
@@ -291,6 +295,15 @@ function updateAgent(id, patch) {
   return next;
 }
 
+// 删除智能体：元灵（builtin）不允许删；其余连人设带记录整目录删除
+function deleteAgent(id) {
+  const meta = readAgent(id);
+  if (!meta) throw new Error('智能体不存在');
+  if (meta.builtin) throw new Error('元灵是内置智能体，不能删除');
+  fs.rmSync(path.join(AGENTS_DIR, id), { recursive: true, force: true });
+  return true;
+}
+
 function listAgents() {
   if (!fs.existsSync(AGENTS_DIR)) return [];
   return fs.readdirSync(AGENTS_DIR)
@@ -325,7 +338,8 @@ function paramsBlock(params) {
 // ---------------------------------------------------------------
 function defaultSettings() {
   return {
-    theme: { mode: 'preset', preset: 'default', accent: '' },
+    theme: { mode: 'preset', preset: 'default', accent: '', css_name: '' },
+    language: 'zh-CN',
     models: [
       { id: 'model-cloud', name: '云端默认', provider: 'cloud', baseUrl: 'https://api.openai.com', apiKey: '', model: '' },
       { id: 'model-local', name: '本地默认', provider: 'local', baseUrl: 'http://127.0.0.1:11434', apiKey: '', model: '' },
@@ -335,9 +349,11 @@ function defaultSettings() {
 
 // 旧版本是 { mode, cloud, local }，读到就迁成模型库
 function migrateSettings(raw) {
-  const s = { theme: defaultSettings().theme, models: [...defaultSettings().models] };
+  const d = defaultSettings();
+  const s = { theme: d.theme, language: d.language, models: [...d.models] };
   if (!raw) return s;
   if (raw.theme && typeof raw.theme === 'object') s.theme = { ...s.theme, ...raw.theme };
+  if (raw.language) s.language = String(raw.language);
   if (Array.isArray(raw.models) && raw.models.length) {
     s.models = raw.models.map((m) => ({
       id: m.id || 'model-' + Math.random().toString(36).slice(2, 8),
@@ -367,8 +383,9 @@ function readSettings() {
 
 function writeSettings(patch) {
   const cur = readSettings();
-  const next = { theme: cur.theme, models: cur.models };
+  const next = { theme: cur.theme, language: cur.language, models: cur.models };
   if (patch && patch.theme) next.theme = { ...cur.theme, ...patch.theme };
+  if (patch && patch.language) next.language = String(patch.language);
   if (Array.isArray(patch?.models)) next.models = patch.models;
   fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2), 'utf8');
@@ -481,7 +498,12 @@ async function importAgents(tarBuffer) {
 
 module.exports = {
   PARAM_DEFS, clampParams, paramsBlock,
-  createAgent, readAgent, updateAgent, listAgents, agentDir, exportAgents, importAgents,
+  createAgent, readAgent, updateAgent, listAgents, deleteAgent, agentDir, exportAgents, importAgents,
   renderSoul, renderAgentsMd, renderIdentity,
   readSettings, writeSettings, addModel, updateModel, deleteModel, getAgentModel,
+  DATA_DIR, AGENTS_DIR, ensureMetasoul: () => metasoul.ensureMetasoul(AGENTS_DIR, module.exports),
 };
+
+// 元灵（MetaSoul）：内置智能体，启动即确保存在、身份字段强制归位（详见 metasoul.js）
+// 放在 exports 之后调用并把自身传入，避免循环依赖
+metasoul.ensureMetasoul(AGENTS_DIR, module.exports);

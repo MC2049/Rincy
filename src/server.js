@@ -11,9 +11,17 @@ const config = require('./config');
 const Busboy = require('busboy');
 const memory = require('./memory');
 const adapter = require('./model-adapter');
+const i18n = require('./i18n');
+const metasoul = require('./metasoul');
 
 const PORT = Number(process.env.RINCY_PORT || 3000);
 const WEB_DIR = path.join(__dirname, '..', 'web');
+const THEMES_BUILTIN_DIR = path.join(__dirname, '..', 'themes');
+const THEMES_CUSTOM_DIR = path.join(config.DATA_DIR, 'themes');
+
+// 版本号唯一来源：package.json（前端"设置"里显示用）
+let APP_VERSION = '';
+try { APP_VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version || ''; } catch { /* 读不到就空着 */ }
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -93,11 +101,16 @@ async function handleChat(req, res) {
   if (!text) { sendJSON(res, 400, { error: '消息不能为空' }); return; }
 
   const dir = config.agentDir(meta.id);
+  const isSoul = metasoul.isMetasoul(meta);
 
   // ① 用户消息进完整本地存档（聊天框记录的来源；只是不发给 API，除非孟婆关闭）
   memory.appendHistory(dir, '用户', text);
 
   const messages = buildMessages(meta, text);
+  // 元灵：system prompt 末尾追加所有其它智能体的内容快照 + 写回协议
+  if (isSoul) {
+    messages[0].content += '\n\n' + metasoul.buildSnapshot(config) + '\n\n' + metasoul.protocolBlock();
+  }
   const params = config.clampParams(meta.params);
 
   res.writeHead(200, {
@@ -125,9 +138,20 @@ async function handleChat(req, res) {
       onDelta: (d) => send('delta', { text: d }),
       onThought: (t) => send('thought', { text: t }),
     });
+    // 元灵：回复里的 ```metasoul 写回块在此落盘；用户只看到块外的正文
+    let applied = [];
+    if (isSoul) {
+      const parsed = metasoul.parseWrites(full);
+      const r = metasoul.applyWrites(parsed.writes, config);
+      applied = r.applied;
+      if (r.errors.length) send('metasoul', { errors: r.errors });
+      const cleaned = parsed.cleaned || metasoul.fallbackText(applied) || full;
+      full = cleaned;
+      if (applied.length) send('metasoul', { applied });
+    }
     // ② 回复完成后：AI 回复进完整存档
     memory.appendHistory(dir, meta.name, full);
-    send('done', { full });
+    send('done', { full, applied });
   } catch (e) {
     // 失败不吞消息：人话报错发到流里，聊天框照常显示
     send('error', { message: e.message || '出了点问题，稍后再试' });
@@ -162,6 +186,123 @@ const server = http.createServer(async (req, res) => {
       sendJSON(res, 200, { params: config.PARAM_DEFS });
       return;
     }
+    // ---- 语言包（.lang）----
+    if (p === '/api/langs' && req.method === 'GET') {
+      sendJSON(res, 200, { langs: i18n.listLangs(), current: config.readSettings().language || i18n.DEFAULT_LANG });
+      return;
+    }
+    if (p === '/api/langs/import' && req.method === 'POST') {
+      const busboy = Busboy({ headers: req.headers, limits: { fileSize: 2 * 1024 * 1024 } });
+      let saved = null, pending = 0, done = false;
+      const finish = () => { if (done && pending === 0) sendJSON(res, 200, { ok: true, code: saved }); };
+      busboy.on('file', (_name, file, info) => {
+        pending++;
+        const fname = path.basename(info.filename || 'custom.lang');
+        const chunks = [];
+        file.on('data', (c) => chunks.push(c));
+        file.on('end', () => {
+          try { saved = i18n.saveLang(fname, Buffer.concat(chunks).toString('utf8')); }
+          catch (e) { sendJSON(res, 400, { error: '导入失败：' + e.message }); }
+          pending--; finish();
+        });
+      });
+      busboy.on('finish', () => { done = true; finish(); if (done && pending === 0 && saved === null && !res.writableEnded) sendJSON(res, 400, { error: '导入失败：没收到文件' }); });
+      busboy.on('error', () => sendJSON(res, 400, { error: '导入失败：文件格式不对' }));
+      req.pipe(busboy);
+      return;
+    }
+    const lm = p.match(/^\/api\/langs\/([^/]+)$/);
+    if (lm && req.method === 'GET') {
+      const code = i18n.safeCode(decodeURIComponent(lm[1]));
+      if (!code) { sendJSON(res, 400, { error: '语言代码不合法' }); return; }
+      sendJSON(res, 200, { code, dict: i18n.loadDict(code) });
+      return;
+    }
+    if (lm && req.method === 'DELETE') {
+      try { i18n.deleteLang(decodeURIComponent(lm[1])); sendJSON(res, 200, { ok: true }); }
+      catch (e) { sendJSON(res, 400, { error: e.message }); }
+      return;
+    }
+
+    // ---- CSS 主题 ----
+    // 主题名文件名安全：防路径穿越
+    function safeThemeName(raw) {
+      const n = String(raw || '').trim().replace(/\.css$/i, '');
+      if (!n || n.length > 60) return '';
+      if (/[\\/:*?"<>|]|\.\./.test(n)) return '';
+      return n;
+    }
+    function listThemes() {
+      const out = new Map();
+      for (const [dir, source] of [[THEMES_BUILTIN_DIR, 'builtin'], [THEMES_CUSTOM_DIR, 'custom']]) {
+        let files = [];
+        try { files = fs.readdirSync(dir).filter((f) => f.endsWith('.css')); } catch { continue; }
+        for (const f of files) {
+          const name = f.slice(0, -4);
+          const prev = out.get(name);
+          out.set(name, { name, source, builtin: source === 'builtin' || Boolean(prev && prev.builtin) });
+        }
+      }
+      return [...out.values()];
+    }
+    if (p === '/api/themes' && req.method === 'GET') {
+      sendJSON(res, 200, { themes: listThemes(), current: (config.readSettings().theme || {}).css_name || '' });
+      return;
+    }
+    if (p === '/api/themes/import' && req.method === 'POST') {
+      const busboy = Busboy({ headers: req.headers, limits: { fileSize: 2 * 1024 * 1024 } });
+      let saved = null, pending = 0, done = false, failed = false;
+      const finish = () => { if (done && pending === 0 && !failed) sendJSON(res, 200, { ok: true, name: saved }); };
+      busboy.on('file', (_name, file, info) => {
+        pending++;
+        const fname = path.basename(info.filename || 'theme.css');
+        const chunks = [];
+        file.on('data', (c) => chunks.push(c));
+        file.on('end', () => {
+          const name = safeThemeName(fname);
+          if (!name) { failed = true; sendJSON(res, 400, { error: '导入失败：文件名不合法' }); return; }
+          try {
+            fs.mkdirSync(THEMES_CUSTOM_DIR, { recursive: true });
+            fs.writeFileSync(path.join(THEMES_CUSTOM_DIR, name + '.css'), Buffer.concat(chunks), 'utf8');
+            saved = name;
+          } catch (e) { failed = true; sendJSON(res, 400, { error: '导入失败：' + e.message }); }
+          pending--; finish();
+        });
+      });
+      busboy.on('finish', () => { done = true; finish(); if (done && pending === 0 && saved === null && !failed && !res.writableEnded) sendJSON(res, 400, { error: '导入失败：没收到文件' }); });
+      busboy.on('error', () => sendJSON(res, 400, { error: '导入失败：文件格式不对' }));
+      req.pipe(busboy);
+      return;
+    }
+    const tm = p.match(/^\/api\/themes\/([^/]+)(\/raw)?$/);
+    if (tm && tm[2] && req.method === 'GET') {
+      // 原样吐 CSS：自定义同名覆盖内置
+      const name = safeThemeName(decodeURIComponent(tm[1]));
+      if (!name) { res.writeHead(400); res.end('bad name'); return; }
+      let file = path.join(THEMES_CUSTOM_DIR, name + '.css');
+      if (!fs.existsSync(file)) file = path.join(THEMES_BUILTIN_DIR, name + '.css');
+      if (!fs.existsSync(file)) { sendJSON(res, 404, { error: '主题不存在' }); return; }
+      res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
+      res.end(fs.readFileSync(file));
+      return;
+    }
+    if (tm && !tm[2] && req.method === 'DELETE') {
+      const name = safeThemeName(decodeURIComponent(tm[1]));
+      const f = path.join(THEMES_CUSTOM_DIR, name + '.css');
+      if (!name || !fs.existsSync(f)) { sendJSON(res, 400, { error: '主题不存在或不是导入的' }); return; }
+      fs.rmSync(f);
+      // 如果正在用这个主题就退回默认
+      const s = config.readSettings();
+      if ((s.theme || {}).css_name === name) config.writeSettings({ theme: { css_name: '' } });
+      sendJSON(res, 200, { ok: true });
+      return;
+    }
+
+    if (p === '/api/version' && req.method === 'GET') {
+      sendJSON(res, 200, { version: APP_VERSION });
+      return;
+    }
+
     // ---- 智能体导入/导出（tar，不压缩）----
     // 注意：必须放在下面的 :id 正则路由之前，否则 export/import 会被当成智能体 id
     if (p === '/api/agents/export' && req.method === 'GET') {
@@ -189,7 +330,11 @@ const server = http.createServer(async (req, res) => {
         file.on('data', (c) => chunks.push(c));
         file.on('end', () => {
           config.importAgents(Buffer.concat(chunks))
-            .then((r) => sendJSON(res, 200, { ok: true, imported: r.imported }))
+            .then((r) => {
+              // 导入包里可能带着别的安装的元灵目录：身份强制归位
+              config.ensureMetasoul();
+              sendJSON(res, 200, { ok: true, imported: r.imported });
+            })
             .catch((e) => sendJSON(res, 400, { error: '导入失败：' + e.message }));
         });
       });
@@ -306,6 +451,16 @@ const server = http.createServer(async (req, res) => {
         // 清空聊天记录（不删人设）
         memory.clearHistory(config.agentDir(id), meta);
         sendJSON(res, 200, { ok: true });
+        return;
+      }
+      if (!action && req.method === 'DELETE') {
+        // 删除智能体：元灵（builtin）在 config.deleteAgent 里拒绝
+        try {
+          config.deleteAgent(id);
+          sendJSON(res, 200, { ok: true });
+        } catch (e) {
+          sendJSON(res, 403, { error: e.message });
+        }
         return;
       }
       if (!action && req.method === 'GET') {

@@ -403,3 +403,38 @@ dialog.wide-dialog { max-width: 480px; width: 92%; }
   background: var(--bg-base); color: var(--label-primary); font-size: var(--font-small); cursor: pointer;
 }
 .preset-card.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ---------- v1.0.0 新增：元灵徽标 / 删除按钮 / 轻提示 / 版本行 ---------- */
+.builtin-badge {
+  flex: none;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.app:not(.menu-open) .builtin-badge { display: none; }
+.agent-item .del-agent { color: var(--label-tertiary); }
+.agent-item .del-agent:hover { color: #e5484d; }
+.sett-version { opacity: .55; font-size: 12px; margin-right: auto; }
+.toast {
+  position: fixed;
+  top: 14px; right: 14px;
+  z-index: 1000;
+  max-width: min(70vw, 320px);
+  padding: 9px 14px;
+  border-radius: var(--radius-button);
+  background: var(--bg-panel);
+  color: var(--label-primary);
+  border: 1px solid var(--border-medium);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .18);
+  font-size: var(--font-small);
+  line-height: var(--line-small);
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity .25s ease, transform .25s ease;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateY(0); }

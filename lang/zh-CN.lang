@@ -1,0 +1,192 @@
+# Rincy 内置语言包：简体中文（zh-CN）
+__lang_name__ = 简体中文
+
+# ---- 菜单 ----
+menu.new_agent_title = 新建智能体
+menu.settings = 设置
+menu.settings_title = 设置
+menu.arrow_title = 收起/展开菜单
+menu.empty = 还没有智能体，点 + 创建
+menu.builtin_badge = 内置
+
+# ---- 对话 ----
+chat.toggle_menu_title = 收起/展开菜单
+chat.toggle_debug_title = 收起/展开调试
+chat.status_ok = 正常
+chat.placeholder = 说点什么…
+chat.send = 发送
+chat.thinking = 思考中…
+chat.empty = 还没有聊天记录，说第一句话吧
+chat.no_agent = 先在左边创建一个智能体
+chat.no_reply = （没有收到回复）
+chat.debug.close_title = 收起调试
+chat.debug.title = 调试
+
+# ---- 调试屏折叠区 ----
+fold.basic = 基础
+fold.style = 风格
+fold.memory = 记忆
+fold.behavior = 行为
+fold.identity = 身份
+fold.speech = 说话方式
+fold.permission = 权限
+fold.system = 系统
+fold.history = 设定历史
+
+# ---- 参数滑块（键 = 参数名）----
+param.temperature.label = 语气
+param.temperature.left = 严谨原著
+param.temperature.right = 自由发挥
+param.maxReplyTokens.label = 回答长度
+param.maxReplyTokens.left = 简短
+param.maxReplyTokens.right = 详细
+param.top_p.label = 用词范围
+param.top_p.left = 常用词
+param.top_p.right = 广泛用词
+param.frequency_penalty.label = 重复倾向
+param.frequency_penalty.left = 允许重复
+param.frequency_penalty.right = 避免重复
+param.context_recent_count.label = 保留多少轮完整对话
+param.ooc_strength.label = 保持人设
+param.ooc_strength.left = 松
+param.ooc_strength.right = 严
+hist.param_set = {label}调到「{word}」
+
+# ---- 口头禅 ----
+catch.label = 口头禅
+catch.placeholder = 输入口头禅
+catch.add = 添加
+catch.delete_title = 删除
+
+# ---- 记忆 ----
+memory.warden = 开启孟婆系统
+memory.speed = 遗忘速度
+memory.speed.never = 不遗忘
+memory.speed.slow = 较慢
+memory.speed.standard = 标准
+memory.speed.fast = 较快
+memory.warden.on = 开启了孟婆系统
+memory.warden.off = 关闭了孟婆系统
+memory.speed_set = 遗忘速度调到「{word}」
+
+# ---- 行为 ----
+behavior.emoji = 表情使用
+behavior.emoji.never = 不用
+behavior.emoji.sometimes = 偶尔
+behavior.emoji.often = 频繁
+behavior.proactive = 主动提问
+behavior.proactive.never = 不主动
+behavior.proactive.sometimes = 偶尔
+behavior.proactive.often = 频繁
+behavior.format = 回答格式
+behavior.format.plain = 纯文本
+behavior.format.list = 允许列表
+behavior.format.markdown = 允许 Markdown
+behavior.changed = {field}改为「{value}」
+behavior.self_edit.on = 允许修改人设
+behavior.self_edit.off = 禁止修改人设
+
+# ---- 文本字段 ----
+taboo.label = 禁忌话题
+taboo.placeholder = 它不该碰的话题…
+extra.label = 额外要求
+extra.placeholder = 回答尽量短、不用感叹号…
+identity.name = 名字
+identity.name_ph = 它的名字
+identity.desc = 一句话简介
+identity.desc_ph = 用一句话描述它是谁
+identity.soul = 详细人设
+identity.soul_ph = 大段角色设定…
+speech.address = 怎么称呼你
+speech.address_ph = 主人 / 你 / 阁下
+speech.style = 说话特征
+speech.style_ph = 喜欢用比喻、语速慢、句尾常带省略号…
+
+# ---- 权限 ----
+perm.self_edit = 允许智能体修改自己的人设
+perm.history = 允许查看历史存档
+perm.view_files = 查看原始配置文件
+
+# ---- 系统 ----
+system.model_label = 当前对话用的模型
+system.model_none = （未选）
+system.model_empty = （还没添加模型，去设置里加）
+system.model_tip = 模型在"设置"里添加和配置，这里只选给这个对话用哪个。
+system.local_short = 本地·
+system.cloud_short = 云端·
+system.local = 本地
+system.cloud = 云端
+system.unnamed = (未命名)
+
+# ---- 通用 ----
+common.saved = 已保存
+common.just_now = 刚刚
+common.close = 关闭
+common.cancel = 取消
+common.save = 保存
+common.delete = 删除
+common.edit = 编辑
+common.ok = 知道了
+common.export_agent = 导出这个智能体
+common.delete_agent_title = 删除这个智能体
+common.confirm_delete_agent = 删除「{name}」？聊天记录和人设会一起消失，无法恢复。
+common.confirm_delete_model = 删除这个模型？用它对话的智能体会失效。
+common.init_fail = 启动失败：{e}
+common.export_fail = 导出失败：{e}
+common.import_fail = 导入失败：{e}
+common.import_ok = 导入成功：{n} 个
+common.files_empty = （还没有内容）
+common.need_name = 先给智能体起个名字
+common.need_base_model = 接口地址和模型名必填
+
+# ---- 弹窗：新建智能体 ----
+newdlg.title = 新建智能体
+newdlg.name_ph = 给它起个名字（比如：艾琳）
+newdlg.desc_ph = 描述一下它（比如：一个外冷内热的吸血鬼伯爵）
+newdlg.create = 创建
+
+# ---- 弹窗：原始配置 ----
+filesdlg.title = 原始配置文件
+
+# ---- 设置弹窗 ----
+settings.title = 设置
+settings.theme = 主题色
+theme.preset.default = 默认紫
+theme.preset.ocean = 海蓝
+theme.preset.forest = 森林绿
+theme.preset.sunset = 落日橙
+theme.preset.rose = 玫瑰粉
+theme.custom = 自定义主色
+settings.models = 模型库
+models.empty = 还没有模型，点"添加模型"。
+settings.add_model = ＋ 添加模型
+settings.export_agents = 导出智能体
+settings.import_agents = 导入智能体
+settings.language = 语言 / Language
+settings.import_lang = 导入 .lang 语言包
+settings.css_theme = CSS 主题
+settings.import_theme = 导入 .css 主题
+settings.no_css = 无（默认样式）
+settings.version = 版本
+
+# ---- 添加模型弹窗 ----
+modeldlg.add = 添加模型
+modeldlg.edit = 编辑模型
+modeldlg.template = 选一个模板（可再改）
+modeldlg.name_ph = 模型名字（如：我的 DeepSeek）
+modeldlg.base_ph = 接口地址
+modeldlg.key_ph = API 密钥（本地可留空）
+modeldlg.model_ph = 模型名
+
+# ---- 元灵 ----
+metasoul.toast = 元灵已写入 {n} 个文件
+metasoul.fail = 元灵写入失败：{e}
+metasoul.desc = 连接所有智能体的灵
+
+# ---- 色板短标 ----
+theme.swatch.default = 紫
+theme.swatch.ocean = 海
+theme.swatch.forest = 绿
+theme.swatch.sunset = 橙
+theme.swatch.rose = 粉
+common.request_fail = 请求失败（HTTP {code}）

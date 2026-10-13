@@ -9,67 +9,67 @@
 <body>
 <div class="app" id="app">
 
-  <!-- 菜单屏（左，可折叠：56px 图标条 ↔ 240px） -->
+  <!-- 菜单屏（左，可折叠） -->
   <aside class="menu" id="menu">
     <div class="menu-head">
       <span class="menu-title">Rincy</span>
-      <button class="icon-btn" id="btn-new" title="新建智能体">＋</button>
+      <button class="icon-btn" id="btn-new" title="新建智能体" data-i18n-title="menu.new_agent_title">＋</button>
     </div>
     <nav class="menu-list" id="agent-list"></nav>
     <div class="menu-foot">
-      <button class="icon-btn" id="btn-settings" title="设置">⚙</button>
-      <span class="menu-label">设置</span>
+      <button class="icon-btn" id="btn-settings" title="设置" data-i18n-title="menu.settings_title">⚙</button>
+      <span class="menu-label" data-i18n="menu.settings">设置</span>
     </div>
-    <button class="menu-arrow" id="btn-menu-arrow" title="收起/展开菜单">‹</button>
+    <button class="menu-arrow" id="btn-menu-arrow" title="收起/展开菜单" data-i18n-title="menu.arrow_title">‹</button>
   </aside>
 
   <!-- 对话屏（中，主屏，永远展开） -->
   <section class="chat">
     <header class="chat-head">
-      <button class="icon-btn" id="btn-menu-toggle" title="收起/展开菜单">☰</button>
+      <button class="icon-btn" id="btn-menu-toggle" title="收起/展开菜单" data-i18n-title="chat.toggle_menu_title">☰</button>
       <span class="chat-title" id="chat-title"></span>
-      <span class="dot dot-ok" id="chat-dot" title="正常"></span>
+      <span class="dot dot-ok" id="chat-dot" title="正常" data-i18n-title="chat.status_ok"></span>
       <span class="spacer"></span>
-      <button class="icon-btn" id="btn-debug-toggle" title="收起/展开调试">▦</button>
+      <button class="icon-btn" id="btn-debug-toggle" title="收起/展开调试" data-i18n-title="chat.toggle_debug_title">▦</button>
     </header>
     <div class="chat-messages" id="chat-messages"></div>
     <div class="chat-input-row">
-      <input class="chat-input" id="chat-input" placeholder="说点什么…">
-      <button class="pill-btn" id="btn-send">发送</button>
+      <input class="chat-input" id="chat-input" placeholder="说点什么…" data-i18n-ph="chat.placeholder">
+      <button class="pill-btn" id="btn-send" data-i18n="chat.send">发送</button>
     </div>
   </section>
 
   <!-- 手机端抽屉遮罩：打开菜单或调试时盖住对话屏，点它关闭抽屉 -->
   <div class="overlay" id="overlay" hidden></div>
 
-  <!-- 调试屏（右，可折叠：0 ↔ 360px） -->
+  <!-- 调试屏（右，可折叠） -->
   <aside class="debug" id="debug">
     <div class="debug-head">
-      <span class="debug-title">调试</span>
+      <span class="debug-title" data-i18n="chat.debug.title">调试</span>
       <span class="spacer"></span>
-      <button class="icon-btn" id="btn-debug-close" title="收起调试">×</button>
+      <button class="icon-btn" id="btn-debug-close" title="收起调试" data-i18n-title="chat.debug.close_title">×</button>
     </div>
     <div class="debug-body">
 
       <!-- 基础（默认展开） -->
       <details class="fold" open>
-        <summary>基础</summary>
+        <summary data-i18n="fold.basic">基础</summary>
         <div class="fold-inner">
           <div class="field">
-            <div class="field-label">语气</div>
+            <div class="field-label" data-i18n="param.temperature.label">语气</div>
             <div class="slider-row">
-              <span class="slider-end">严谨原著</span>
+              <span class="slider-end" data-i18n="param.temperature.left">严谨原著</span>
               <input type="range" class="slider" data-param="temperature" min="0" max="2" step="0.01" value="0.7">
-              <span class="slider-end">自由发挥</span>
+              <span class="slider-end" data-i18n="param.temperature.right">自由发挥</span>
               <input type="number" class="num-input" data-param="temperature" min="0" max="2" step="0.01" value="0.70">
             </div>
           </div>
           <div class="field">
-            <div class="field-label">回答长度</div>
+            <div class="field-label" data-i18n="param.maxReplyTokens.label">回答长度</div>
             <div class="slider-row">
-              <span class="slider-end">简短</span>
+              <span class="slider-end" data-i18n="param.maxReplyTokens.left">简短</span>
               <input type="range" class="slider" data-param="maxReplyTokens" min="128" max="4096" step="64" value="2048">
-              <span class="slider-end">详细</span>
+              <span class="slider-end" data-i18n="param.maxReplyTokens.right">详细</span>
               <input type="number" class="num-input" data-param="maxReplyTokens" min="128" max="4096" step="64" value="2048">
             </div>
           </div>
@@ -78,31 +78,31 @@
 
       <!-- 风格（默认展开） -->
       <details class="fold" open>
-        <summary>风格</summary>
+        <summary data-i18n="fold.style">风格</summary>
         <div class="fold-inner">
           <div class="field">
-            <div class="field-label">用词范围</div>
+            <div class="field-label" data-i18n="param.top_p.label">用词范围</div>
             <div class="slider-row">
-              <span class="slider-end">常用词</span>
+              <span class="slider-end" data-i18n="param.top_p.left">常用词</span>
               <input type="range" class="slider" data-param="top_p" min="0.1" max="1" step="0.01" value="0.9">
-              <span class="slider-end">广泛用词</span>
+              <span class="slider-end" data-i18n="param.top_p.right">广泛用词</span>
               <input type="number" class="num-input" data-param="top_p" min="0.1" max="1" step="0.01" value="0.90">
             </div>
           </div>
           <div class="field">
-            <div class="field-label">重复倾向</div>
+            <div class="field-label" data-i18n="param.frequency_penalty.label">重复倾向</div>
             <div class="slider-row">
-              <span class="slider-end">允许重复</span>
+              <span class="slider-end" data-i18n="param.frequency_penalty.left">允许重复</span>
               <input type="range" class="slider" data-param="frequency_penalty" min="-2" max="2" step="0.1" value="0">
-              <span class="slider-end">避免重复</span>
+              <span class="slider-end" data-i18n="param.frequency_penalty.right">避免重复</span>
               <input type="number" class="num-input" data-param="frequency_penalty" min="-2" max="2" step="0.1" value="0">
             </div>
           </div>
           <div class="field">
-            <div class="field-label">口头禅</div>
+            <div class="field-label" data-i18n="catch.label">口头禅</div>
             <div class="catch-row">
-              <input class="catch-input" id="catch-input" placeholder="输入口头禅">
-              <button class="pill-btn small" id="btn-catch-add">添加</button>
+              <input class="catch-input" id="catch-input" placeholder="输入口头禅" data-i18n-ph="catch.placeholder">
+              <button class="pill-btn small" id="btn-catch-add" data-i18n="catch.add">添加</button>
             </div>
             <div class="tag-row" id="catch-tags"></div>
           </div>
@@ -113,10 +113,10 @@
 
       <!-- 记忆（默认折叠） -->
       <details class="fold">
-        <summary>记忆</summary>
+        <summary data-i18n="fold.memory">记忆</summary>
         <div class="fold-inner">
           <div class="field">
-            <div class="field-label">保留多少轮完整对话</div>
+            <div class="field-label" data-i18n="param.context_recent_count.label">保留多少轮完整对话</div>
             <div class="slider-row">
               <span class="slider-end">1</span>
               <input type="range" class="slider" data-param="context_recent_count" min="1" max="50" step="1" value="10">
@@ -124,14 +124,14 @@
               <input type="number" class="num-input" data-param="context_recent_count" min="1" max="50" step="1" value="10">
             </div>
           </div>
-          <label class="switch-row"><input type="checkbox" id="sw-mengpo"> 开启孟婆系统</label>
+          <label class="switch-row"><input type="checkbox" id="sw-mengpo"> <span data-i18n="memory.warden">开启孟婆系统</span></label>
           <div class="speed-row" id="speed-row" hidden>
-            <span>遗忘速度</span>
+            <span data-i18n="memory.speed">遗忘速度</span>
             <select id="sel-speed">
-              <option value="never">不遗忘</option>
-              <option value="slow">较慢</option>
-              <option value="standard" selected>标准</option>
-              <option value="fast">较快</option>
+              <option value="never" data-i18n="memory.speed.never">不遗忘</option>
+              <option value="slow" data-i18n="memory.speed.slow">较慢</option>
+              <option value="standard" selected data-i18n="memory.speed.standard">标准</option>
+              <option value="fast" data-i18n="memory.speed.fast">较快</option>
             </select>
           </div>
         </div>
@@ -139,49 +139,49 @@
 
       <!-- 行为（默认折叠） -->
       <details class="fold">
-        <summary>行为</summary>
+        <summary data-i18n="fold.behavior">行为</summary>
         <div class="fold-inner">
           <div class="field">
-            <div class="field-label">表情使用</div>
+            <div class="field-label" data-i18n="behavior.emoji">表情使用</div>
             <div class="choice-row" data-behavior="emoji_policy">
-              <button class="tag-btn" data-value="never">不用</button>
-              <button class="tag-btn" data-value="sometimes">偶尔</button>
-              <button class="tag-btn" data-value="often">频繁</button>
+              <button class="tag-btn" data-value="never" data-i18n="behavior.emoji.never">不用</button>
+              <button class="tag-btn" data-value="sometimes" data-i18n="behavior.emoji.sometimes">偶尔</button>
+              <button class="tag-btn" data-value="often" data-i18n="behavior.emoji.often">频繁</button>
             </div>
           </div>
           <div class="field">
-            <div class="field-label">主动提问</div>
+            <div class="field-label" data-i18n="behavior.proactive">主动提问</div>
             <div class="choice-row" data-behavior="proactive_question">
-              <button class="tag-btn" data-value="never">不主动</button>
-              <button class="tag-btn" data-value="sometimes">偶尔</button>
-              <button class="tag-btn" data-value="often">频繁</button>
+              <button class="tag-btn" data-value="never" data-i18n="behavior.proactive.never">不主动</button>
+              <button class="tag-btn" data-value="sometimes" data-i18n="behavior.proactive.sometimes">偶尔</button>
+              <button class="tag-btn" data-value="often" data-i18n="behavior.proactive.often">频繁</button>
             </div>
           </div>
           <div class="field">
-            <div class="field-label">回答格式</div>
+            <div class="field-label" data-i18n="behavior.format">回答格式</div>
             <div class="choice-row" data-behavior="format_policy">
-              <button class="tag-btn" data-value="plain">纯文本</button>
-              <button class="tag-btn" data-value="list">允许列表</button>
-              <button class="tag-btn" data-value="markdown">允许 Markdown</button>
+              <button class="tag-btn" data-value="plain" data-i18n="behavior.format.plain">纯文本</button>
+              <button class="tag-btn" data-value="list" data-i18n="behavior.format.list">允许列表</button>
+              <button class="tag-btn" data-value="markdown" data-i18n="behavior.format.markdown">允许 Markdown</button>
             </div>
           </div>
           <div class="field">
-            <div class="field-label">保持人设</div>
+            <div class="field-label" data-i18n="param.ooc_strength.label">保持人设</div>
             <div class="slider-row">
-              <span class="slider-end">松</span>
+              <span class="slider-end" data-i18n="param.ooc_strength.left">松</span>
               <input type="range" class="slider" data-param="ooc_strength" min="0" max="100" step="1" value="80">
-              <span class="slider-end">严</span>
+              <span class="slider-end" data-i18n="param.ooc_strength.right">严</span>
               <input type="number" class="num-input" data-param="ooc_strength" min="0" max="100" step="1" value="80">
             </div>
           </div>
           <div class="field">
-            <label class="field-label" for="tf-taboo">禁忌话题</label>
-            <textarea id="tf-taboo" data-textfield="taboo" rows="3" placeholder="它不该碰的话题…"></textarea>
+            <label class="field-label" for="tf-taboo" data-i18n="taboo.label">禁忌话题</label>
+            <textarea id="tf-taboo" data-textfield="taboo" rows="3" placeholder="它不该碰的话题…" data-i18n-ph="taboo.placeholder"></textarea>
             <span class="saved-hint" aria-live="polite"></span>
           </div>
           <div class="field">
-            <label class="field-label" for="tf-extra">额外要求</label>
-            <textarea id="tf-extra" data-textfield="extra_requirements" rows="3" placeholder="回答尽量短、不用感叹号…"></textarea>
+            <label class="field-label" for="tf-extra" data-i18n="extra.label">额外要求</label>
+            <textarea id="tf-extra" data-textfield="extra_requirements" rows="3" placeholder="回答尽量短、不用感叹号…" data-i18n-ph="extra.placeholder"></textarea>
             <span class="saved-hint" aria-live="polite"></span>
           </div>
         </div>
@@ -189,21 +189,21 @@
 
       <!-- 身份（默认折叠） -->
       <details class="fold">
-        <summary>身份</summary>
+        <summary data-i18n="fold.identity">身份</summary>
         <div class="fold-inner">
           <div class="field">
-            <label class="field-label" for="tf-name">名字</label>
-            <input class="catch-input" id="tf-name" data-textfield="name" placeholder="它的名字">
+            <label class="field-label" for="tf-name" data-i18n="identity.name">名字</label>
+            <input class="catch-input" id="tf-name" data-textfield="name" placeholder="它的名字" data-i18n-ph="identity.name_ph">
             <span class="saved-hint" aria-live="polite"></span>
           </div>
           <div class="field">
-            <label class="field-label" for="tf-desc">一句话简介</label>
-            <input class="catch-input" id="tf-desc" data-textfield="description" placeholder="用一句话描述它是谁">
+            <label class="field-label" for="tf-desc" data-i18n="identity.desc">一句话简介</label>
+            <input class="catch-input" id="tf-desc" data-textfield="description" placeholder="用一句话描述它是谁" data-i18n-ph="identity.desc_ph">
             <span class="saved-hint" aria-live="polite"></span>
           </div>
           <div class="field">
-            <label class="field-label" for="tf-soul">详细人设</label>
-            <textarea id="tf-soul" data-textfield="soul" rows="4" placeholder="大段角色设定…"></textarea>
+            <label class="field-label" for="tf-soul" data-i18n="identity.soul">详细人设</label>
+            <textarea id="tf-soul" data-textfield="soul" rows="4" placeholder="大段角色设定…" data-i18n-ph="identity.soul_ph"></textarea>
             <span class="saved-hint" aria-live="polite"></span>
           </div>
         </div>
@@ -211,16 +211,16 @@
 
       <!-- 说话方式（默认折叠） -->
       <details class="fold">
-        <summary>说话方式</summary>
+        <summary data-i18n="fold.speech">说话方式</summary>
         <div class="fold-inner">
           <div class="field">
-            <label class="field-label" for="tf-address">怎么称呼你</label>
-            <input class="catch-input" id="tf-address" data-textfield="address_user" placeholder="主人 / 你 / 阁下">
+            <label class="field-label" for="tf-address" data-i18n="speech.address">怎么称呼你</label>
+            <input class="catch-input" id="tf-address" data-textfield="address_user" placeholder="主人 / 你 / 阁下" data-i18n-ph="speech.address_ph">
             <span class="saved-hint" aria-live="polite"></span>
           </div>
           <div class="field">
-            <label class="field-label" for="tf-speech">说话特征</label>
-            <textarea id="tf-speech" data-textfield="speech_style" rows="3" placeholder="喜欢用比喻、语速慢、句尾常带省略号…"></textarea>
+            <label class="field-label" for="tf-speech" data-i18n="speech.style">说话特征</label>
+            <textarea id="tf-speech" data-textfield="speech_style" rows="3" placeholder="喜欢用比喻、语速慢、句尾常带省略号…" data-i18n-ph="speech.style_ph"></textarea>
             <span class="saved-hint" aria-live="polite"></span>
           </div>
         </div>
@@ -228,31 +228,31 @@
 
       <!-- 权限（默认折叠） -->
       <details class="fold">
-        <summary>权限</summary>
+        <summary data-i18n="fold.permission">权限</summary>
         <div class="fold-inner">
-          <label class="switch-row"><input type="checkbox" id="sw-self-edit"> 允许智能体修改自己的人设</label>
-          <label class="switch-row"><input type="checkbox" id="sw-history-visible"> 允许查看历史存档</label>
-          <button class="pill-btn ghost" id="btn-view-config">查看原始配置文件</button>
+          <label class="switch-row"><input type="checkbox" id="sw-self-edit"> <span data-i18n="perm.self_edit">允许智能体修改自己的人设</span></label>
+          <label class="switch-row"><input type="checkbox" id="sw-history-visible"> <span data-i18n="perm.history">允许查看历史存档</span></label>
+          <button class="pill-btn ghost" id="btn-view-config" data-i18n="perm.view_files">查看原始配置文件</button>
         </div>
       </details>
 
       <!-- 系统（默认折叠）：给当前对话选模型（模型库在全局设置里管理） -->
       <details class="fold">
-        <summary>系统</summary>
+        <summary data-i18n="fold.system">系统</summary>
         <div class="fold-inner">
           <div class="field">
-            <div class="field-label">当前对话用的模型</div>
+            <div class="field-label" data-i18n="system.model_label">当前对话用的模型</div>
             <select class="pill-select" id="sel-agent-model">
-              <option value="">（未选）</option>
+              <option value="" data-i18n="system.model_none">（未选）</option>
             </select>
-            <p class="field-tip">模型在"设置"里添加和配置，这里只选给这个对话用哪个。</p>
+            <p class="field-tip" data-i18n="system.model_tip">模型在"设置"里添加和配置，这里只选给这个对话用哪个。</p>
           </div>
         </div>
       </details>
 
       <!-- 设定历史（默认折叠） -->
       <details class="fold">
-        <summary>设定历史</summary>
+        <summary data-i18n="fold.history">设定历史</summary>
         <div class="fold-inner">
           <div class="timeline" id="timeline">
             <!-- 初始为空，随设定操作逐条追加 -->
@@ -266,72 +266,89 @@
 
 <dialog id="todo-dialog">
   <p id="todo-text"></p>
-  <button class="pill-btn small" onclick="this.closest('dialog').close()">知道了</button>
+  <button class="pill-btn small" onclick="this.closest('dialog').close()" data-i18n="common.ok">知道了</button>
 </dialog>
 
 <dialog id="new-agent-dialog">
-  <h3>新建智能体</h3>
-  <input id="new-agent-name" placeholder="给它起个名字（比如：艾琳）">
-  <textarea id="new-agent-desc" rows="3" placeholder="描述一下它（比如：一个外冷内热的吸血鬼伯爵）"></textarea>
+  <h3 data-i18n="newdlg.title">新建智能体</h3>
+  <input id="new-agent-name" placeholder="给它起个名字（比如：艾琳）" data-i18n-ph="newdlg.name_ph">
+  <textarea id="new-agent-desc" rows="3" placeholder="描述一下它（比如：一个外冷内热的吸血鬼伯爵）" data-i18n-ph="newdlg.desc_ph"></textarea>
   <div class="dialog-btns">
-    <button class="pill-btn small" id="btn-new-create">创建</button>
-    <button class="pill-btn small ghost" onclick="this.closest('dialog').close()">取消</button>
+    <button class="pill-btn small" id="btn-new-create" data-i18n="newdlg.create">创建</button>
+    <button class="pill-btn small ghost" onclick="this.closest('dialog').close()" data-i18n="common.cancel">取消</button>
   </div>
 </dialog>
 
 <dialog id="files-dialog">
-  <h3>原始配置文件</h3>
+  <h3 data-i18n="filesdlg.title">原始配置文件</h3>
   <pre id="files-content"></pre>
-  <button class="pill-btn small" onclick="this.closest('dialog').close()">关闭</button>
+  <button class="pill-btn small" onclick="this.closest('dialog').close()" data-i18n="common.close">关闭</button>
 </dialog>
 
-<!-- 全局设置：主题色 + 模型库 -->
+<!-- 全局设置：主题色 + 语言 + CSS 主题 + 模型库 -->
 <dialog id="settings-dialog" class="wide-dialog">
-  <h3>设置</h3>
+  <h3 data-i18n="settings.title">设置</h3>
   <div class="sett-section">
-    <div class="sett-title">主题色</div>
+    <div class="sett-title" data-i18n="settings.theme">主题色</div>
     <div class="theme-row" id="theme-row">
-      <button class="swatch" data-preset="default" data-color="#6366f1" title="默认紫">紫</button>
-      <button class="swatch" data-preset="ocean" data-color="#0ea5e9" title="海蓝">海</button>
-      <button class="swatch" data-preset="forest" data-color="#10b981" title="森林绿">绿</button>
-      <button class="swatch" data-preset="sunset" data-color="#f59e0b" title="落日橙">橙</button>
-      <button class="swatch" data-preset="rose" data-color="#ec4899" title="玫瑰粉">粉</button>
+      <button class="swatch" data-preset="default" data-color="#6366f1" title="默认紫" data-i18n="theme.swatch.default" data-i18n-title="theme.preset.default">紫</button>
+      <button class="swatch" data-preset="ocean" data-color="#0ea5e9" title="海蓝" data-i18n="theme.swatch.ocean" data-i18n-title="theme.preset.ocean">海</button>
+      <button class="swatch" data-preset="forest" data-color="#10b981" title="森林绿" data-i18n="theme.swatch.forest" data-i18n-title="theme.preset.forest">绿</button>
+      <button class="swatch" data-preset="sunset" data-color="#f59e0b" title="落日橙" data-i18n="theme.swatch.sunset" data-i18n-title="theme.preset.sunset">橙</button>
+      <button class="swatch" data-preset="rose" data-color="#ec4899" title="玫瑰粉" data-i18n="theme.swatch.rose" data-i18n-title="theme.preset.rose">粉</button>
     </div>
-    <label class="switch-row"><input type="checkbox" id="theme-custom-chec"> 自定义主色</label>
+    <label class="switch-row"><input type="checkbox" id="theme-custom-chec"> <span data-i18n="theme.custom">自定义主色</span></label>
     <input type="color" class="theme-custom-input" id="theme-custom-input" value="#6366f1">
     <span class="saved-hint" id="theme-saved"></span>
   </div>
   <div class="sett-section">
-    <div class="sett-title">模型库</div>
+    <div class="sett-title" data-i18n="settings.language">语言 / Language</div>
+    <select class="pill-select" id="sel-lang"></select>
+    <div style="margin-top:8px;">
+      <button class="pill-btn small ghost" id="btn-import-lang" data-i18n="settings.import_lang">导入 .lang 语言包</button>
+    </div>
+    <input type="file" id="import-lang-file" accept=".lang,text/plain" style="display:none;">
+  </div>
+  <div class="sett-section">
+    <div class="sett-title" data-i18n="settings.css_theme">CSS 主题</div>
+    <select class="pill-select" id="sel-css-theme"></select>
+    <div style="margin-top:8px;">
+      <button class="pill-btn small ghost" id="btn-import-theme" data-i18n="settings.import_theme">导入 .css 主题</button>
+    </div>
+    <input type="file" id="import-theme-file" accept=".css,text/css" style="display:none;">
+  </div>
+  <div class="sett-section">
+    <div class="sett-title" data-i18n="settings.models">模型库</div>
     <div id="model-list"></div>
-    <button class="pill-btn" id="btn-add-model">＋ 添加模型</button>
+    <button class="pill-btn" id="btn-add-model" data-i18n="settings.add_model">＋ 添加模型</button>
     <div style="margin-top:8px; display:flex; gap:8px;">
-      <button class="pill-btn small" id="btn-export-agents">导出智能体</button>
-      <button class="pill-btn small ghost" id="btn-import-agents">导入智能体</button>
+      <button class="pill-btn small" id="btn-export-agents" data-i18n="settings.export_agents">导出智能体</button>
+      <button class="pill-btn small ghost" id="btn-import-agents" data-i18n="settings.import_agents">导入智能体</button>
     </div>
     <input type="file" id="import-agents-file" accept=".tar" style="display:none;">
   </div>
   <div class="dialog-btns">
-    <button class="pill-btn small ghost" onclick="this.closest('dialog').close()">关闭</button>
+    <span class="sett-version" id="app-version"></span>
+    <button class="pill-btn small ghost" onclick="this.closest('dialog').close()" data-i18n="common.close">关闭</button>
   </div>
 </dialog>
 
 <!-- 添加模型：预置模板 + 自定义 -->
 <dialog id="add-model-dialog">
-  <h3>添加模型</h3>
-  <div class="sett-title">选一个模板（可再改）</div>
+  <h3 data-i18n="modeldlg.add">添加模型</h3>
+  <div class="sett-title" data-i18n="modeldlg.template">选一个模板（可再改）</div>
   <div class="preset-row" id="preset-row">
     <button class="preset-card" data-provider="cloud" data-base="https://api.openai.com" data-model="gpt-4o-mini">OpenAI</button>
     <button class="preset-card active" data-provider="cloud" data-base="https://integrate.api.nvidia.com/v1" data-model="deepseek-ai/deepseek-v4-flash-0731">NVIDIA</button>
     <button class="preset-card" data-provider="local" data-base="http://127.0.0.1:11434" data-model="qwen2.5:7b">Ollama 本地</button>
   </div>
-  <input class="catch-input" id="am-name" placeholder="模型名字（如：我的 DeepSeek）">
-  <input class="catch-input" id="am-base" placeholder="接口地址">
-  <input class="catch-input" id="am-key" type="password" placeholder="API 密钥（本地可留空）">
-  <input class="catch-input" id="am-model" placeholder="模型名">
+  <input class="catch-input" id="am-name" placeholder="模型名字（如：我的 DeepSeek）" data-i18n-ph="modeldlg.name_ph">
+  <input class="catch-input" id="am-base" placeholder="接口地址" data-i18n-ph="modeldlg.base_ph">
+  <input class="catch-input" id="am-key" type="password" placeholder="API 密钥（本地可留空）" data-i18n-ph="modeldlg.key_ph">
+  <input class="catch-input" id="am-model" placeholder="模型名" data-i18n-ph="modeldlg.model_ph">
   <div class="dialog-btns">
-    <button class="pill-btn small" id="btn-am-save">保存</button>
-    <button class="pill-btn small ghost" onclick="this.closest('dialog').close()">取消</button>
+    <button class="pill-btn small" id="btn-am-save" data-i18n="common.save">保存</button>
+    <button class="pill-btn small ghost" onclick="this.closest('dialog').close()" data-i18n="common.cancel">取消</button>
   </div>
 </dialog>
 

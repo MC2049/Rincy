@@ -9,10 +9,67 @@ const app = $('#app');
 
 const state = { agents: [], currentId: null, paramDefs: [], settings: null, params: {}, agent: null };
 
+// ---------- i18n：.lang 语言包（内置 zh-CN/en-US + 用户导入） ----------
+// 字典 = 内置 zh-CN 打底 + 当前语言覆盖；缺键时回落中文，再回落键名
+const i18nState = { lang: 'zh-CN', dict: {}, base: {} };
+
+function t(key, vars) {
+  let s = i18nState.dict[key] ?? i18nState.base[key] ?? key;
+  if (vars) for (const [k, v] of Object.entries(vars)) s = s.replaceAll('{' + k + '}', String(v));
+  return s;
+}
+
+async function loadLangDict(code) {
+  i18nState.lang = code || 'zh-CN';
+  const [cur, base] = await Promise.all([
+    api('/api/langs/' + encodeURIComponent(i18nState.lang)).catch(() => ({ dict: {} })),
+    api('/api/langs/zh-CN').catch(() => ({ dict: {} })),
+  ]);
+  i18nState.dict = cur.dict || {};
+  i18nState.base = base.dict || {};
+}
+
+// 把字典铺到静态 DOM：data-i18n=文本 / data-i18n-ph=占位符 / data-i18n-title=悬停提示
+function applyI18n() {
+  document.documentElement.lang = i18nState.lang;
+  $$('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  $$('[data-i18n-ph]').forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
+  $$('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+}
+
+async function changeLanguage(code) {
+  const { settings } = await api('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language: code }),
+  });
+  state.settings = settings;
+  await loadLangDict(settings.language);
+  applyI18n();
+  renderLangList(); // 选项里的语言名要用新字典里的称呼
+  await refreshAgents();
+  if (state.agent) renderAgentModel();
+}
+
+function renderLangList() {
+  const sel = $('#sel-lang');
+  const current = state.settings?.language || 'zh-CN';
+  api('/api/langs').then(({ langs }) => {
+    sel.innerHTML = '';
+    for (const l of langs) {
+      const o = document.createElement('option');
+      o.value = l.code;
+      o.textContent = l.name + (l.custom ? ' ⭐' : '');
+      sel.append(o);
+    }
+    sel.value = current;
+  }).catch(() => {});
+}
+
 async function api(path, opts) {
   const res = await fetch(path, opts);
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error || `请求失败（HTTP ${res.status}）`);
+  if (!res.ok) throw new Error(json.error || t('common.request_fail', { code: res.status }));
   return json;
 }
 
@@ -63,10 +120,12 @@ function renderAgents() {
   if (!state.agents.length) {
     const empty = document.createElement('div');
     empty.className = 'menu-empty';
-    empty.textContent = '还没有智能体，点 + 创建';
+    empty.textContent = t('menu.empty');
     list.append(empty);
   }
-  for (const a of state.agents) {
+  // 元灵（内置）置顶，其余按创建时间倒序（后端已排好）
+  const sorted = [...state.agents].sort((a, b) => (b.builtin ? 1 : 0) - (a.builtin ? 1 : 0));
+  for (const a of sorted) {
     const item = document.createElement('button');
     item.className = 'agent-item' + (a.id === state.currentId ? ' active' : '');
 
@@ -81,19 +140,55 @@ function renderAgents() {
     name.className = 'agent-name';
     name.textContent = a.name;
 
+    item.append(avatar, name);
+
+    if (a.builtin) {
+      const badge = document.createElement('span');
+      badge.className = 'builtin-badge';
+      badge.textContent = t('menu.builtin_badge');
+      item.append(badge);
+    }
+
     const expBtn = document.createElement('button');
     expBtn.className = 'icon-btn small';
     expBtn.style.marginLeft = 'auto';
     expBtn.textContent = '↓';
-    expBtn.title = '导出这个智能体';
+    expBtn.title = t('common.export_agent');
     expBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       window.open('/api/agents/export?agentId=' + encodeURIComponent(a.id), '_blank');
     });
+    item.append(expBtn);
 
-    item.append(avatar, name, expBtn);
+    // 元灵不能删（后端也会拒绝），只有普通智能体显示删除按钮
+    if (!a.builtin) {
+      const delBtn = document.createElement('button');
+      delBtn.className = 'icon-btn small del-agent';
+      delBtn.textContent = '×';
+      delBtn.title = t('common.delete_agent_title');
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteAgentItem(a).catch((err) => alert(err.message));
+      });
+      item.append(delBtn);
+    }
+
     item.addEventListener('click', () => selectAgent(a.id).catch((e) => alert(e.message)));
     list.append(item);
+  }
+}
+
+async function deleteAgentItem(a) {
+  if (!confirm(t('common.confirm_delete_agent', { name: a.name }))) return;
+  await api('/api/agents/' + encodeURIComponent(a.id), { method: 'DELETE' });
+  await refreshAgents();
+  if (state.currentId === a.id) {
+    state.currentId = null;
+    state.agent = null;
+    $('#chat-title').textContent = '';
+    $('#chat-messages').innerHTML = '';
+    const next = [...state.agents].sort((x, y) => (y.builtin ? 1 : 0) - (x.builtin ? 1 : 0))[0];
+    if (next) await selectAgent(next.id);
   }
 }
 
@@ -166,8 +261,10 @@ function bindSliders() {
       clearTimeout(recordTimer);
       recordTimer = setTimeout(() => {
         const mid = (Number(slider.min) + Number(slider.max)) / 2;
-        const word = Number(slider.value) >= mid ? p.right : p.left;
-        addHistory('刚刚', `${p.label}调到「${word}」`);
+        const word = Number(slider.value) >= mid
+          ? t('param.' + p.name + '.right')
+          : t('param.' + p.name + '.left');
+        addHistory(t('common.just_now'), t('hist.param_set', { label: t('param.' + p.name + '.label'), word }));
       }, 300);
     };
     slider.addEventListener('change', () => { queueParamSave(p.name, slider.value); record(); });
@@ -194,7 +291,7 @@ function bindSwitches() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: $('#sw-mengpo').checked }),
       });
-      addHistory('刚刚', $('#sw-mengpo').checked ? '开启了孟婆系统' : '关闭了孟婆系统');
+      addHistory(t('common.just_now'), t($('#sw-mengpo').checked ? 'memory.warden.on' : 'memory.warden.off'));
       state.params = agent.params;
     } catch (e) { alert(e.message); }
   });
@@ -206,8 +303,7 @@ function bindSwitches() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ speed: $('#sel-speed').value }),
       });
-      const word = { never: '不遗忘', slow: '较慢', standard: '标准', fast: '较快' }[$('#sel-speed').value];
-      addHistory('刚刚', `遗忘速度调到「${word}」`);
+      addHistory(t('common.just_now'), t('memory.speed_set', { word: t('memory.speed.' + $('#sel-speed').value) }));
     } catch (e) { alert(e.message); }
   });
   $('#sw-self-edit').addEventListener('change', async () => {
@@ -218,7 +314,7 @@ function bindSwitches() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ self_edit: $('#sw-self-edit').checked }),
       });
-      addHistory('刚刚', $('#sw-self-edit').checked ? '允许修改人设' : '禁止修改人设');
+      addHistory(t('common.just_now'), t($('#sw-self-edit').checked ? 'behavior.self_edit.on' : 'behavior.self_edit.off'));
     } catch (e) { alert(e.message); }
   });
   $('#sw-history-visible').addEventListener('change', async () => {
@@ -258,7 +354,7 @@ function bindChoices() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ [key]: btn.dataset.value }),
           });
-          addHistory('刚刚', `${row.previousElementSibling ? row.previousElementSibling.textContent : key}改为「${btn.textContent}」`);
+          addHistory(t('common.just_now'), t('behavior.changed', { field: row.previousElementSibling ? row.previousElementSibling.textContent : key, value: btn.textContent }));
         } catch (e) { alert(e.message); }
       });
     });
@@ -276,7 +372,7 @@ function renderCatchphrases(list) {
     label.textContent = phrase;
     const del = document.createElement('button');
     del.textContent = '×';
-    del.title = '删除';
+    del.title = t('common.delete');
     del.addEventListener('click', async () => {
       if (!state.currentId) return;
       try {
@@ -340,7 +436,7 @@ function renderTextFields(agent) {
 function flashSaved(el) {
   const hint = el.closest('.field')?.querySelector('.saved-hint');
   if (!hint) return;
-  hint.textContent = '已保存';
+  hint.textContent = t('common.saved');
   clearTimeout(hint._t);
   hint._t = setTimeout(() => { hint.textContent = ''; }, 1500);
 }
@@ -380,13 +476,13 @@ function renderAgentModel() {
   const models = state.settings?.models || [];
   if (!models.length) {
     const o = document.createElement('option');
-    o.value = ''; o.textContent = '（还没添加模型，去设置里加）';
+    o.value = ''; o.textContent = t('system.model_empty');
     sel.append(o);
   } else {
     for (const m of models) {
       const o = document.createElement('option');
       o.value = m.id;
-      o.textContent = (m.provider === 'local' ? '本地·' : '云端·') + (m.name || m.model || m.id);
+      o.textContent = (m.provider === 'local' ? t('system.local_short') : t('system.cloud_short')) + (m.name || m.model || m.id);
       sel.append(o);
     }
   }
@@ -419,6 +515,98 @@ function applyTheme(theme) {
   document.documentElement.style.setProperty('--accent', accent);
 }
 
+// ---------- CSS 主题（.css 导入，选择即时生效） ----------
+async function applyCssTheme(name) {
+  const el = document.getElementById('custom-theme');
+  if (!name) { if (el) el.remove(); return; }
+  try {
+    const res = await fetch('/api/themes/' + encodeURIComponent(name) + '/raw');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const css = await res.text();
+    let style = el;
+    if (!style) { style = document.createElement('style'); style.id = 'custom-theme'; document.head.append(style); }
+    style.textContent = css;
+  } catch { if (el) el.remove(); }
+}
+
+async function renderCssThemeList() {
+  const sel = $('#sel-css-theme');
+  try {
+    const { themes, current } = await api('/api/themes');
+    sel.innerHTML = '';
+    const none = document.createElement('option');
+    none.value = ''; none.textContent = t('settings.no_css');
+    sel.append(none);
+    for (const th of themes) {
+      const o = document.createElement('option');
+      o.value = th.name;
+      o.textContent = th.name + (th.custom ? ' ⭐' : '');
+      sel.append(o);
+    }
+    sel.value = current || '';
+  } catch { /* 列表拉不到就不动 */ }
+}
+
+function saveCssTheme(name) {
+  const curTheme = state.settings?.theme || {};
+  api('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ theme: { ...curTheme, css_name: name } }),
+  }).then(async ({ settings }) => {
+    state.settings = settings;
+    await applyCssTheme(name);
+    await renderCssThemeList();
+  }).catch((e) => alert(e.message));
+}
+
+async function uploadFile(url, file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(url, { method: 'POST', body: fd });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || ('HTTP ' + res.status));
+  return json;
+}
+
+function bindLangAndCssTheme() {
+  $('#sel-lang').addEventListener('change', () => changeLanguage($('#sel-lang').value).catch((e) => alert(e.message)));
+  $('#btn-import-lang').addEventListener('click', () => $('#import-lang-file').click());
+  $('#import-lang-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const { code } = await uploadFile('/api/langs/import', file);
+      await renderLangList();
+      await changeLanguage(code); // 导入即切换，立见效果
+      toast(t('common.import_ok', { n: 1 }));
+    } catch (err) { alert(t('common.import_fail', { e: err.message })); }
+    e.target.value = '';
+  });
+  $('#sel-css-theme').addEventListener('change', () => saveCssTheme($('#sel-css-theme').value));
+  $('#btn-import-theme').addEventListener('click', () => $('#import-theme-file').click());
+  $('#import-theme-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const { name } = await uploadFile('/api/themes/import', file);
+      saveCssTheme(name); // 导入即应用
+      toast(t('common.import_ok', { n: 1 }));
+    } catch (err) { alert(t('common.import_fail', { e: err.message })); }
+    e.target.value = '';
+  });
+}
+
+// ---------- 轻提示（右上角，自动消失） ----------
+function toast(msg) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.append(el);
+  setTimeout(() => el.classList.add('show'), 10);
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 3200);
+}
+
 function renderSettingsDialog() {
   renderThemeUI();
   renderModelList();
@@ -443,7 +631,7 @@ function saveTheme(patch) {
     applyTheme(settings.theme);
     renderThemeUI();
     const h = $('#theme-saved');
-    h.textContent = '已保存';
+    h.textContent = t('common.saved');
     clearTimeout(h._t); h._t = setTimeout(() => { h.textContent = ''; }, 1500);
   }).catch((e) => alert(e.message));
 }
@@ -455,7 +643,7 @@ function renderModelList() {
   if (!models.length) {
     const empty = document.createElement('div');
     empty.className = 'model-empty';
-    empty.textContent = '还没有模型，点"添加模型"。';
+    empty.textContent = t('models.empty');
     box.append(empty);
     return;
   }
@@ -466,7 +654,7 @@ function renderModelList() {
     info.className = 'model-info';
     const nm = document.createElement('div');
     nm.className = 'model-name';
-    nm.textContent = (m.provider === 'local' ? '本地' : '云端') + ' · ' + (m.name || m.model || '(未命名)');
+    nm.textContent = (m.provider === 'local' ? t('system.local') : t('system.cloud')) + ' · ' + (m.name || m.model || t('system.unnamed'));
     const sub = document.createElement('div');
     sub.className = 'model-sub';
     sub.textContent = m.model || m.baseUrl || '';
@@ -475,14 +663,14 @@ function renderModelList() {
     edit.className = 'icon-btn';
     edit.style.marginLeft = 'auto';
     edit.textContent = '✎';
-    edit.title = '编辑';
+    edit.title = t('common.edit');
     edit.addEventListener('click', () => openEditModelDialog(m));
     const del = document.createElement('button');
     del.className = 'icon-btn';
     del.textContent = '×';
-    del.title = '删除';
+    del.title = t('common.delete');
     del.addEventListener('click', async () => {
-      if (!confirm('删除这个模型？用它对话的智能体会失效。')) return;
+      if (!confirm(t('common.confirm_delete_model'))) return;
       await modelDelete(m.id);
     });
     row.append(info, edit, del);
@@ -509,7 +697,7 @@ let amEditId = null; // null = 添加模式；非 null = 正在编辑的模型 i
 
 function openEditModelDialog(m) {
   amEditId = m.id;
-  $('#add-model-dialog h3').textContent = '编辑模型';
+  $('#add-model-dialog h3').textContent = t('modeldlg.edit');
   $('#am-name').value = m.name || '';
   $('#am-base').value = m.baseUrl || '';
   $('#am-key').value = m.apiKey || '';
@@ -523,7 +711,7 @@ async function saveNewModel() {
   const baseUrl = $('#am-base').value.trim();
   const apiKey = $('#am-key').value.trim();
   const model = $('#am-model').value.trim();
-  if (!baseUrl || !model) { alert('接口地址和模型名必填'); return; }
+  if (!baseUrl || !model) { alert(t('common.need_base_model')); return; }
   const provider = $('#am-base').dataset.provider === 'local' ? 'local' : 'cloud';
   if (amEditId) {
     // 编辑已有模型
@@ -580,7 +768,7 @@ function bindAddModelDialog() {
   $('#btn-add-model').addEventListener('click', () => {
     // 打开前用当前选中的模型信息预填（默认用 NVIDIA 模板）
     amEditId = null;
-    $('#add-model-dialog h3').textContent = '添加模型';
+    $('#add-model-dialog h3').textContent = t('modeldlg.add');
     $('#am-key').value = '';
     fillModelForm({ provider: 'cloud', base: 'https://integrate.api.nvidia.com/v1', model: 'deepseek-ai/deepseek-v4-flash-0731', name: '' });
     $('#add-model-dialog').showModal();
@@ -600,7 +788,7 @@ function bindAddModelDialog() {
       a.download = fname;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 3000);
-    } catch (e) { alert('导出失败：' + e.message); }
+    } catch (e) { alert(t('common.export_fail', { e: e.message })); }
   });
   // 导入智能体
   $('#btn-import-agents').addEventListener('click', () => $('#import-agents-file').click());
@@ -614,9 +802,9 @@ function bindAddModelDialog() {
       const res = await fetch(base + '/api/agents/import', { method: 'POST', body: fd });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || ('HTTP ' + res.status));
-      alert('导入成功：' + (json.imported || 0) + ' 个智能体');
+      alert(t('common.import_ok', { n: json.imported || 0 }));
       location.reload();
-    } catch (err) { alert('导入失败：' + err.message); }
+    } catch (err) { alert(t('common.import_fail', { e: err.message })); }
     e.target.value = '';
   });
 
@@ -652,7 +840,7 @@ async function loadHistory() {
   if (!msgs.children.length) {
     const empty = document.createElement('div');
     empty.className = 'empty-hint';
-    empty.textContent = '还没有聊天记录，说第一句话吧';
+    empty.textContent = t('chat.empty');
     msgs.append(empty);
   }
   msgs.scrollTop = msgs.scrollHeight;
@@ -738,7 +926,7 @@ async function send() {
   const input = $('#chat-input');
   const text = input.value.trim();
   if (!text || replying) return;
-  if (!state.currentId) { alert('先在左边创建一个智能体'); return; }
+  if (!state.currentId) { alert(t('chat.no_agent')); return; }
   input.value = '';
   addBubble('me', text);
 
@@ -755,7 +943,7 @@ async function send() {
     const th = document.createElement('div');
     th.className = 'thought';
     th.hidden = true;
-    th.innerHTML = '<span class="thought-label">思考中…</span> <span class="thought-text"></span>';
+    th.innerHTML = '<span class="thought-label">' + t('chat.thinking') + '</span> <span class="thought-text"></span>';
     const t = document.createElement('div');
     t.className = 'text';
     t.textContent = '…';
@@ -774,7 +962,7 @@ async function send() {
     });
     if (!res.ok || !res.body) {
       const j = await res.json().catch(() => ({}));
-      throw new Error(j.error || `请求失败（HTTP ${res.status}）`);
+      throw new Error(j.error || t('common.request_fail', { code: res.status }));
     }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -787,6 +975,17 @@ async function send() {
         stickToBottom();
       } else if (curEvent === 'delta' && j.text) {
         full += j.text; aiBubble.t.innerHTML = renderMarkdown(full); stickToBottom();
+      } else if (curEvent === 'metasoul' && (j.applied || j.errors)) {
+        // 元灵写回结果：成功 toast + 刷新列表（别的智能体文件变了）
+        if (j.applied && j.applied.length) {
+          toast(t('metasoul.toast', { n: j.applied.length }));
+          refreshAgents();
+        }
+        if (j.errors && j.errors.length) toast(t('metasoul.fail', { e: j.errors[0].error }));
+      } else if (curEvent === 'done' && typeof j.full === 'string') {
+        // 用服务端清理过的正文替换气泡（去掉写回块，只留给人看的话）
+        aiBubble.t.innerHTML = renderMarkdown(j.full) || '…';
+        if (j.applied && j.applied.length) refreshAgents();
       } else if (j.message) {
         aiBubble.t.textContent = j.message; // 人话报错，不吞消息
       }
@@ -807,7 +1006,7 @@ async function send() {
         try { handleData(payload); } catch { /* 忽略解析不了的行 */ }
       }
     }
-    if (!full && aiBubble.t.textContent === '…' && aiBubble.thText.textContent === '') aiBubble.t.textContent = '（没有收到回复）';
+    if (!full && aiBubble.t.textContent === '…' && aiBubble.thText.textContent === '') aiBubble.t.textContent = t('chat.no_reply');
   } catch (e) {
     aiBubble.t.textContent = e.message;
   } finally {
@@ -820,7 +1019,7 @@ async function send() {
 async function createAgent() {
   const name = $('#new-agent-name').value.trim();
   const desc = $('#new-agent-desc').value.trim();
-  if (!name) { alert('先给智能体起个名字'); return; }
+  if (!name) { alert(t('common.need_name')); return; }
   const { agent } = await api('/api/agents', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -843,7 +1042,7 @@ async function refreshAgents() {
 async function viewFiles() {
   if (!state.currentId) return;
   const { soul, agents, memory } = await api(`/api/agents/${state.currentId}/files`);
-  $('#files-content').textContent = [soul, agents, memory].filter(Boolean).join('\n\n---\n\n') || '（还没有内容）';
+  $('#files-content').textContent = [soul, agents, memory].filter(Boolean).join('\n\n---\n\n') || t('common.files_empty');
   $('#files-dialog').showModal();
 }
 
@@ -864,6 +1063,11 @@ async function init() {
   const { params } = await api('/api/params');
   state.paramDefs = params;
 
+  await loadSettings();
+  // 语言先行：先铺字典再渲染任何 UI 文本
+  await loadLangDict(state.settings?.language);
+  applyI18n();
+
   loadState();
   bindSliders();
   bindSwitches();
@@ -872,8 +1076,14 @@ async function init() {
   bindTextFields();
   bindSettingsDialog();
   bindAddModelDialog();
-  await loadSettings();
+  bindLangAndCssTheme();
   applyTheme(state.settings?.theme);
+  await applyCssTheme(state.settings?.theme?.css_name || '');
+  renderLangList();
+  await renderCssThemeList();
+  api('/api/version').then(({ version }) => {
+    $('#app-version').textContent = 'Rincy v' + (version || '?');
+  }).catch(() => {});
 
   $('#btn-menu-toggle').addEventListener('click', () => {
     app.classList.contains('menu-open') ? setMenu(false) : openMenu();
@@ -906,5 +1116,5 @@ async function init() {
 }
 
 init().catch((e) => {
-  document.body.innerHTML = `<p style="color:#c00;padding:20px;">启动失败：${e.message}</p>`;
+  document.body.innerHTML = `<p style="color:#c00;padding:20px;">${t('common.init_fail', { e: e.message })}</p>`;
 });

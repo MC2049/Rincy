@@ -249,10 +249,10 @@ Rincy 只对自己 UI 层的内容负责：不预置违法角色、不内置违�
 ## 许可证
 
 
-本项目核心代码（src/、web/、scripts/）采用 MIT License。
+本项目核心代码（src/、web/、lang/、themes/、scripts/）采用 MIT License。
 
-Android 启动器（android-launcher/）因为使用了 Termux（GPLv3）
-的代码和 bootstrap 包，采用 GPLv3。详见 LICENSE-GPL。
+Android 启动器已拆分为独立仓库 [Rincy-Launcher](https://github.com/MC2049/Rincy-Launcher)：
+因为使用了 Termux（GPLv3）的代码和 bootstrap 包，启动器采用 GPLv3，详见其仓库内的 LICENSE。
 
 两部分独立分发，互不影响。
 
