@@ -190,3 +190,4 @@ theme.swatch.forest = 绿
 theme.swatch.sunset = 橙
 theme.swatch.rose = 粉
 common.request_fail = 请求失败（HTTP {code}）
+system.model_auto = （自动继承模型库）

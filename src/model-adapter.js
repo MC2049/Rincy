@@ -40,12 +40,31 @@ async function chatStream({ modelConf, messages, params, onDelta, onThought, sig
   const headers = { 'Content-Type': 'application/json' };
   if (provider === 'cloud') headers.Authorization = `Bearer ${apiKey}`;
 
-  const res = await fetch(chatEndpoint(baseUrl) || `${baseUrl}/v1/chat/completions`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    signal,
-  });
+  // 兜底超时：模型 5 分钟没响应就放弃，绝不永远停在"思考中"
+  // （调用方传了 signal 就尊重调用方的；否则用自带的 5 分钟定时器）
+  let fetchSignal = signal;
+  let timedOut = false;
+  if (!fetchSignal) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, 5 * 60 * 1000);
+    if (typeof timer.unref === 'function') timer.unref();
+    fetchSignal = ctrl.signal;
+  }
+
+  let res;
+  try {
+    res = await fetch(chatEndpoint(baseUrl) || `${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: fetchSignal,
+    });
+  } catch (e) {
+    if (timedOut || e?.name === 'TimeoutError' || e?.name === 'AbortError') {
+      throw new Error('模型 5 分钟都没回话，先放弃了。可以再试一次，或把「回答长度」调小一点。');
+    }
+    throw new Error('连不上模型接口：' + (e?.message || e));
+  }
 
   if (!res.ok || !res.body) {
     let detail = '';

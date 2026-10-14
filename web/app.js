@@ -487,6 +487,14 @@ function renderAgentModel() {
     }
   }
   sel.value = state.agent?.model_id || '';
+  // 元灵没显式选模型时，后端会自动继承模型库里第一个可用模型——如实显示
+  if (state.agent?.builtin && !state.agent?.model_id && models.length) {
+    const o = document.createElement('option');
+    o.value = '';
+    o.textContent = t('system.model_auto');
+    sel.append(o);
+    sel.value = '';
+  }
 }
 
 function bindAgentModel() {

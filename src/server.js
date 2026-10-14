@@ -57,7 +57,11 @@ function serveStatic(res, pathname) {
     res.end('页面不存在');
     return;
   }
-  res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+  // WebView 对静态文件一律要求重新验证：升级覆盖文件后，前端立即是新代码
+  res.writeHead(200, {
+    'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
+    'Cache-Control': 'no-cache',
+  });
   res.end(fs.readFileSync(file));
 }
 
@@ -121,7 +125,13 @@ async function handleChat(req, res) {
   const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
   // 这个对话选用的模型配置（模型库里的某条）
-  const modelConf = config.getAgentModel(meta);
+  let modelConf = config.getAgentModel(meta);
+  // 元灵开箱即用：自己没选模型时，自动继承模型库里第一个配置完整的模型
+  if (!modelConf && isSoul) {
+    const usable = (config.readSettings().models || [])
+      .filter((m) => m.baseUrl && m.model && (m.provider === 'local' || m.apiKey));
+    modelConf = usable[0] || null;
+  }
   if (!modelConf) {
     send('error', { message: '这个对话还没选模型。到"设置"里添加并选一个模型，再聊。' });
     memory.rebuildMemory(dir, meta);

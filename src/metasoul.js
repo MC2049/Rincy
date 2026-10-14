@@ -73,24 +73,33 @@ function clip(s, n) {
 }
 
 // 读：为元灵组装所有其它智能体的内容快照（拼进 system prompt）
-function buildSnapshot(config, memory) {
+// 预算制：总预算 40KB，超出的智能体只进名单（id + 名字 + 简介），
+// 保证 prompt 不会因为智能体太多被撑爆。
+function buildSnapshot(config) {
   const agents = config.listAgents().filter((a) => a.id !== METASOUL_ID);
   if (!agents.length) {
     return '## 管辖范围\n\n（还没有其它智能体。用户创建后，你就能看到并管理它们。）';
   }
-  const parts = [`## 管辖范围（${agents.length} 个智能体的当前内容，已全部注入）`, ''];
+  const BUDGET = 40000;
+  const parts = [`## 管辖范围（共 ${agents.length} 个智能体，内容已注入）`, ''];
+  let used = 0;
+  const skipped = [];
   for (const a of agents) {
+    const header = `---\n### 智能体「${a.name}」（id: ${a.id}）`;
+    if (used > BUDGET) { skipped.push(`- ${a.name}（id: ${a.id}）${a.description ? '：' + a.description : ''}`); continue; }
     const dir = config.agentDir(a.id);
     const read = (f, n) => { try { return clip(fs.readFileSync(path.join(dir, f), 'utf8'), n); } catch { return '（空）'; } };
-    parts.push(`---\n### 智能体「${a.name}」（id: ${a.id}）`);
-    if (a.description) parts.push(`简介：${a.description}`);
-    if (a.taboo) parts.push(`禁忌：${String(a.taboo).replace(/\n/g, '；')}`);
-    parts.push('');
-    parts.push('**SOUL.md**\n```\n' + read('SOUL.md', 2000) + '\n```');
-    parts.push('**AGENTS.md**\n```\n' + read('AGENTS.md', 2000) + '\n```');
-    const mem = read('memory.md', 1200);
-    if (mem !== '（空）') parts.push('**memory.md**\n```\n' + mem + '\n```');
-    parts.push('');
+    const block = [
+      header + (a.description ? `\n简介：${a.description}` : ''),
+      a.taboo ? `禁忌：${String(a.taboo).replace(/\n/g, '；')}` : '',
+      '**SOUL.md**\n```\n' + read('SOUL.md', 2000) + '\n```',
+      '**AGENTS.md**\n```\n' + read('AGENTS.md', 2000) + '\n```',
+    ].filter(Boolean).join('\n') + '\n';
+    used += block.length;
+    parts.push(block);
+  }
+  if (skipped.length) {
+    parts.push(`---\n### 其余 ${skipped.length} 个智能体（内容因篇幅未展开，只有名单）\n` + skipped.join('\n'));
   }
   return parts.join('\n');
 }
