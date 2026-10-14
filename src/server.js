@@ -126,11 +126,21 @@ async function handleChat(req, res) {
 
   // 这个对话选用的模型配置（模型库里的某条）
   let modelConf = config.getAgentModel(meta);
-  // 元灵开箱即用：自己没选模型时，自动继承模型库里第一个配置完整的模型
+  // 元灵开箱即用：自己没选模型时自动继承——
+  // ① 优先用其它智能体正在用的模型（大家能聊通，它也能）；
+  // ② 兜底取模型库里第一个配置完整的。
+  // 这样可避免继承到一个用户从没用过、连不通的模型（比如被墙的官方端点）。
   if (!modelConf && isSoul) {
-    const usable = (config.readSettings().models || [])
-      .filter((m) => m.baseUrl && m.model && (m.provider === 'local' || m.apiKey));
-    modelConf = usable[0] || null;
+    const models = config.readSettings().models || [];
+    const usable = (m) => m && m.baseUrl && m.model && (m.provider === 'local' || m.apiKey);
+    const referenced = config.listAgents()
+      .filter((a) => a.id !== metasoul.METASOUL_ID && a.model_id)
+      .map((a) => a.model_id);
+    for (const id of referenced.reverse()) {
+      const m = models.find((x) => x.id === id);
+      if (usable(m)) { modelConf = m; break; }
+    }
+    if (!modelConf) modelConf = models.find(usable) || null;
   }
   if (!modelConf) {
     send('error', { message: '这个对话还没选模型。到"设置"里添加并选一个模型，再聊。' });
@@ -152,7 +162,7 @@ async function handleChat(req, res) {
     let applied = [];
     if (isSoul) {
       const parsed = metasoul.parseWrites(full);
-      const r = metasoul.applyWrites(parsed.writes, config);
+      const r = metasoul.applyOps(parsed.ops, config);
       applied = r.applied;
       if (r.errors.length) send('metasoul', { errors: r.errors });
       const cleaned = parsed.cleaned || metasoul.fallbackText(applied) || full;
@@ -521,7 +531,15 @@ const server = http.createServer(async (req, res) => {
     if (p.startsWith('/api/')) { sendJSON(res, 404, { error: '接口不存在' }); return; }
     serveStatic(res, p);
   } catch (e) {
-    sendJSON(res, 500, { error: '服务器出了点问题：' + e.message });
+    // 纪律：这里的 catch 是最后防线，绝不能让进程死掉——
+    // SSE 已开头就往流里发 error 事件并收尾；没开头才回 500 JSON。
+    console.error('[server] 请求处理失败：', e);
+    if (res.headersSent) {
+      try { res.write(`event: error\ndata: ${JSON.stringify({ message: '服务器出了点问题：' + e.message })}\n\n`); } catch { /* 连接已断 */ }
+      try { res.end(); } catch { /* 连接已断 */ }
+    } else {
+      sendJSON(res, 500, { error: '服务器出了点问题：' + e.message });
+    }
   }
 });
 

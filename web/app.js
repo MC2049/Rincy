@@ -941,6 +941,9 @@ async function send() {
   replying = true;
   const dot = $('#chat-dot');
   dot.className = 'dot dot-run'; // 蓝色 = 进行中
+  // 兜底保险：6 分钟没有任何结果就主动掐断，绝不把输入框永久卡死
+  const abort = new AbortController();
+  const hardStop = setTimeout(() => abort.abort(), 6 * 60 * 1000);
   // AI 气泡带"思考区 + 回答区"，思考用浅色小字展示在回答上方
   const aiBubble = (() => {
     const msgs = $('#chat-messages');
@@ -950,23 +953,32 @@ async function send() {
     div.className = 'bubble ai';
     const th = document.createElement('div');
     th.className = 'thought';
-    th.hidden = true;
+    th.hidden = false; // 一开始就可见：让"思考中…"成为明确状态，而不是无声等待
     th.innerHTML = '<span class="thought-label">' + t('chat.thinking') + '</span> <span class="thought-text"></span>';
     const t = document.createElement('div');
     t.className = 'text';
-    t.textContent = '…';
+    t.textContent = t('chat.thinking');
     div.append(th, t);
     msgs.append(div);
     const thText = th.querySelector('.thought-text');
     msgs.scrollTop = msgs.scrollHeight;
     return { div, th, thText, t };
   })();
+  // 20 秒还没等到第一个字节就把状态说清楚（"思考中"→"模型还在想"）
+  let gotAnything = false;
+  const waitingTimer = setTimeout(() => {
+    if (!gotAnything) {
+      aiBubble.thText.textContent = t('chat.waiting');
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+  }, 20000);
 
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ agentId: state.currentId, message: text }),
+      signal: abort.signal,
     });
     if (!res.ok || !res.body) {
       const j = await res.json().catch(() => ({}));
@@ -977,6 +989,12 @@ async function send() {
     let buf = '', full = '', curEvent = '', curLines;
     const handleData = (payload) => {
       const j = JSON.parse(payload);
+      if (!gotAnything) {
+        gotAnything = true;
+        clearTimeout(waitingTimer);
+        aiBubble.thText.textContent = '';
+        aiBubble.t.textContent = '';
+      }
       if (curEvent === 'thought' && j.text) {
         aiBubble.th.hidden = false;
         aiBubble.thText.textContent += j.text;
@@ -1016,8 +1034,11 @@ async function send() {
     }
     if (!full && aiBubble.t.textContent === '…' && aiBubble.thText.textContent === '') aiBubble.t.textContent = t('chat.no_reply');
   } catch (e) {
-    aiBubble.t.textContent = e.message;
+    // 主动掐断（6 分钟兜底）给人话解释；其余照常显示错误
+    aiBubble.t.textContent = (e?.name === 'AbortError') ? t('chat.gave_up') : e.message;
   } finally {
+    clearTimeout(hardStop);
+    clearTimeout(waitingTimer);
     replying = false;
     dot.className = 'dot dot-ok'; // 绿色 = 正常
   }

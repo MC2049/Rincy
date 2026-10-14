@@ -191,3 +191,5 @@ theme.swatch.sunset = S
 theme.swatch.rose = R
 common.request_fail = Request failed (HTTP {code})
 system.model_auto = (auto: inherits from model library)
+chat.waiting = Still waiting for the model…
+chat.gave_up = No result after 6 minutes, stopped. Try again, or switch models in "Settings".

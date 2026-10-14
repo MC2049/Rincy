@@ -92,6 +92,7 @@ function buildSnapshot(config) {
     const block = [
       header + (a.description ? `\n简介：${a.description}` : ''),
       a.taboo ? `禁忌：${String(a.taboo).replace(/\n/g, '；')}` : '',
+      (function () { let fl = []; try { fl = fs.readdirSync(config.agentDir(a.id)).filter((x) => x !== 'history'); } catch (e) { } return fl.length ? `文件：${fl.join('、')}` : ''; })(),
       '**SOUL.md**\n```\n' + read('SOUL.md', 2000) + '\n```',
       '**AGENTS.md**\n```\n' + read('AGENTS.md', 2000) + '\n```',
     ].filter(Boolean).join('\n') + '\n';
@@ -104,74 +105,130 @@ function buildSnapshot(config) {
   return parts.join('\n');
 }
 
-// 写回协议说明（拼进 system prompt）
+// 操作协议说明（拼进 system prompt）
 function protocolBlock() {
   return [
-    '## 写回协议（修改其它智能体的唯一方式）',
+    '## 操作协议（你管理其它智能体的唯一方式）',
     '',
-    '上面的「管辖范围」里是每个智能体的当前内容。用户让你修改某个智能体时，',
-    '在回复里输出下面这种代码块（可多个），系统会替你落盘，用户不会看到块本身：',
+    '上面的「管辖范围」里是每个智能体的当前内容与文件清单。用户让你修改或创建智能体时，',
+    '在回复里输出下面这种代码块（可多个），系统会替你执行，用户不会看到块本身：',
+    '',
+    '修改某个智能体目录下的任意文件或配置（file 是相对路径，可带子目录；',
+    'SOUL.md / AGENTS.md / IDENTITY.md / memory.md / agent.json（参数配置）等都可以）：',
     '',
     '```metasoul',
-    '{"agent":"<智能体id>","file":"SOUL.md","content":"完整的新文件内容"}',
+    '{"op":"write","agent":"<智能体id>","file":"SOUL.md","content":"文件完整的新内容"}',
     '```',
     '',
-    `规则：file 只能是 ${WRITABLE_FILES.join(' / ')}；content 必须是该文件完整的新内容（不是增量）；`,
-    'JSON 里换行写成 \\n。改动之外，用一句话告诉用户你改了什么、为什么。id 必须用括号里的原样 id。',
+    '新建智能体（带完整设定，推荐这种方式，建好后在界面上也能继续编辑）：',
+    '',
+    '```metasoul',
+    '{"op":"create","name":"名字","description":"一句话简介","soul_profile":"大段详细人设","speech_style":"说话特征","address_user":"怎么称呼用户","catchphrases":["口头禅1"],"taboo":"禁忌","extra_requirements":"额外要求"}',
+    '```',
+    '',
+    '规则：',
+    '- 除 name 外 create 的字段都可省略；soul_profile 里写完整人设（经历、性格、说话习惯等）。',
+    '- write 的 content 必须是文件完整的新内容（不是增量）；JSON 里换行写成 \\n。',
+    '- 改 agent.json（temperature 等参数）时保持 JSON 合法，且不要动 id 和 builtin 字段。',
+    '- 新建后记得在正文里告诉用户新智能体的名字。改动之外，用一句话说明你做了什么。',
+    '- id 必须用「管辖范围」里括号中的原样 id。',
   ].join('\n');
 }
 
-// 解析回复里的写回块 → { cleaned, writes, bad }
+// 解析回复里的操作块 → { cleaned, ops, bad }
+// 支持两种写法：{"op":"write"/"create",...} 与旧格式 {"agent","file","content"}（等价 op=write）
 function parseWrites(full) {
   const text = String(full || '');
-  const writes = [];
+  const ops = [];
   let bad = 0;
   const cleaned = text.replace(/```metasoul\s*\n?([\s\S]*?)```/g, (_m, body) => {
     try {
       const j = JSON.parse(body.trim());
-      if (typeof j.agent === 'string' && typeof j.file === 'string' && typeof j.content === 'string') {
-        writes.push({ agent: j.agent.trim(), file: j.file.trim(), content: j.content });
+      if (j.op === 'create' && typeof j.name === 'string' && j.name.trim()) {
+        ops.push({ op: 'create', fields: j });
+        return '';
+      }
+      const agent = typeof j.agent === 'string' ? j.agent.trim() : '';
+      const file = typeof j.file === 'string' ? j.file.trim() : '';
+      const content = typeof j.content === 'string' ? j.content : '';
+      if (agent && file && (j.op === 'write' || (content && j.op === undefined))) {
+        ops.push({ op: 'write', agent, file, content });
         return '';
       }
     } catch { /* JSON 坏了 */ }
     bad++;
     return '';
   });
-  return { cleaned: cleaned.replace(/\n{3,}/g, '\n\n').trim(), writes, bad };
+  return { cleaned: cleaned.replace(/\n{3,}/g, '\n\n').trim(), ops, bad };
 }
 
-// 应用写回块 → { applied, errors }
-function applyWrites(writes, config) {
+// 应用操作块 → { applied, errors }
+// write：agents/<id>/ 下的任意文件与配置；create：新建智能体（可带完整人设字段）
+function applyOps(ops, config) {
   const applied = [];
   const errors = [];
-  for (const w of writes || []) {
+  for (const w of ops || []) {
     try {
-      if (!WRITABLE_FILES.includes(w.file)) throw new Error('文件不在白名单：' + w.file);
-      if (w.agent === METASOUL_ID) throw new Error('元灵不能通过写回块修改自己');
+      if (w.op === 'create') {
+        const f = w.fields || {};
+        const created = config.createAgent({ name: f.name, description: f.description });
+        const patch = {};
+        for (const key of ['soul_profile', 'speech_style', 'address_user', 'taboo', 'extra_requirements']) {
+          if (typeof f[key] === 'string' && f[key].trim()) patch[key] = f[key];
+        }
+        if (Array.isArray(f.catchphrases) && f.catchphrases.length) patch.catchphrases = f.catchphrases;
+        if (Object.keys(patch).length) config.updateAgent(created.id, patch);
+        applied.push({ op: 'create', agent: created.id, name: created.name });
+        continue;
+      }
+      // ---- write ----
+      const rel = String(w.file || '').replace(/\\/g, '/').trim();
+      if (!rel || rel.startsWith('/') || rel.split('/').includes('..')) {
+        throw new Error('文件路径不合法：' + w.file);
+      }
+      if (w.agent === METASOUL_ID && rel === 'agent.json') {
+        throw new Error('元灵不能通过操作块修改自己的 agent.json');
+      }
       const target = config.readAgent(w.agent);
       if (!target) throw new Error('智能体不存在：' + w.agent);
-      if (w.file === 'memory.md') {
-        fs.mkdirSync(config.agentDir(w.agent), { recursive: true });
-        fs.writeFileSync(path.join(config.agentDir(w.agent), 'memory.md'), w.content, 'utf8');
-      } else {
-        fs.writeFileSync(path.join(config.agentDir(w.agent), w.file), w.content, 'utf8');
+      const dir = config.agentDir(w.agent);
+      const file = path.resolve(dir, rel);
+      if (!file.startsWith(path.resolve(dir) + path.sep)) throw new Error('文件路径越界：' + w.file);
+      if (rel.endsWith('.json')) {
+        let j;
+        try { j = JSON.parse(w.content); } catch { throw new Error('JSON 文件内容不合法：' + rel); }
+        if (rel === 'agent.json') {
+          j.id = w.agent;                    // id 永远跟目录走，防止目录与内容自相矛盾
+          if (target.builtin) j.builtin = true;
+          w.content = JSON.stringify(j, null, 2);
+        }
       }
-      applied.push({ agent: w.agent, name: target.name, file: w.file });
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, w.content, 'utf8');
+      applied.push({ op: 'write', agent: w.agent, name: target.name, file: rel });
     } catch (e) {
-      errors.push({ agent: w.agent, file: w.file, error: e.message });
+      errors.push({
+        op: w.op, agent: w.agent || '',
+        file: w.file || (w.fields && w.fields.name) || '',
+        error: e.message,
+      });
     }
   }
   return { applied, errors };
 }
 
-// 回复为空但只有写回块时，给用户一句可见的交代
+// 回复为空但只有操作块时，给用户一句可见的交代
 function fallbackText(applied) {
   if (!applied.length) return '';
-  const n = applied.length;
-  return `已按你的要求修改了 ${n} 个文件：` + applied.map((a) => `${a.name}/${a.file}`).join('、') + '。';
+  const created = applied.filter((a) => a.op === 'create');
+  const written = applied.filter((a) => a.op !== 'create');
+  const bits = [];
+  if (created.length) bits.push('已创建：' + created.map((a) => a.name).join('、'));
+  if (written.length) bits.push('已修改 ' + written.length + ' 个文件：' + written.map((a) => a.name + '/' + a.file).join('、'));
+  return bits.join('；') + '。';
 }
 
 module.exports = {
   METASOUL_ID, METASOUL_NAME, WRITABLE_FILES, isMetasoul,
-  ensureMetasoul, buildSnapshot, protocolBlock, parseWrites, applyWrites, fallbackText,
+  ensureMetasoul, buildSnapshot, protocolBlock, parseWrites, applyOps, fallbackText,
 };

@@ -191,3 +191,5 @@ theme.swatch.sunset = 橙
 theme.swatch.rose = 粉
 common.request_fail = 请求失败（HTTP {code}）
 system.model_auto = （自动继承模型库）
+chat.waiting = 模型还在想，请稍等…
+chat.gave_up = 等了 6 分钟没结果，先停了。可以再试一次，或在"设置"里换个模型。
