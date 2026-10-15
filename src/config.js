@@ -16,6 +16,7 @@ const DATA_DIR = process.env.RINCY_DATA_DIR
   : path.join(__dirname, '..', 'data');
 const AGENTS_DIR = path.join(DATA_DIR, 'agents');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+const BACKUP_SETTINGS_FILE = path.join(DATA_DIR, 'settings.backup.json');
 
 // 首次运行兜底：git clone 后没有 data/ 目录，先建好 data/ 与 data/agents/（模块加载即生效）
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -373,22 +374,46 @@ function migrateSettings(raw) {
   return s;
 }
 
+// 读设置：settings.json 丢失或损坏时，自动从 settings.backup.json 恢复。
+// 背景：设备上出现过 settings.json 被重置导致模型库清空、所有对话发不出去的事故——
+// 模型配置（含密钥）是用户手填的，丢了很难还原，必须有一层自动兜底。
 function readSettings() {
-  try {
-    return migrateSettings(JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')));
-  } catch {
-    return defaultSettings();
+  const load = (f) => {
+    try { return migrateSettings(JSON.parse(fs.readFileSync(f, 'utf8'))); } catch { return null; }
+  };
+  const s = load(SETTINGS_FILE) || load(BACKUP_SETTINGS_FILE);
+  if (!s) return defaultSettings();
+  // 主文件没读出来但备份活着 → 悄悄把备份扶正
+  if (!fs.existsSync(SETTINGS_FILE)) {
+    try { fs.copyFileSync(BACKUP_SETTINGS_FILE, SETTINGS_FILE); } catch { /* 尽力而为 */ }
   }
+  return s;
 }
 
 function writeSettings(patch) {
   const cur = readSettings();
+  // 写之前先把当前有效配置留一份备份（只备份"看得出是配置"的内容）
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      const raw = fs.readFileSync(SETTINGS_FILE, 'utf8');
+      if (raw.includes('"models"')) fs.writeFileSync(BACKUP_SETTINGS_FILE, raw, 'utf8');
+    } else if (fs.existsSync(BACKUP_SETTINGS_FILE)) {
+      // 主文件丢失时直接用备份兜底作为写入基线
+      try { fs.copyFileSync(BACKUP_SETTINGS_FILE, SETTINGS_FILE); } catch { /* 尽力而为 */ }
+    }
+  } catch { /* 备份失败不阻塞主流程 */ }
   const next = { theme: cur.theme, language: cur.language, models: cur.models };
   if (patch && patch.theme) next.theme = { ...cur.theme, ...patch.theme };
   if (patch && patch.language) next.language = String(patch.language);
   if (Array.isArray(patch?.models)) next.models = patch.models;
   fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2), 'utf8');
+  // 兜底的兜底：写完发现还没有可用备份（首次配置就丢过文件的情况），镜像一份
+  try {
+    if (!fs.existsSync(BACKUP_SETTINGS_FILE)) {
+      fs.writeFileSync(BACKUP_SETTINGS_FILE, JSON.stringify(next, null, 2), 'utf8');
+    }
+  } catch { /* 尽力而为 */ }
   return next;
 }
 
