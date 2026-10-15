@@ -47,7 +47,9 @@ body {
   grid-template-columns: var(--menu-w-collapsed) 1fr 0px;
   /* 行高锁死 = 容器高：内容再多也只能在内部滚，不能把 .app 撑高 */
   grid-template-rows: minmax(0, 1fr);
-  height: 100dvh;
+  /* 百分比链（html/body 100% → .app 100%）：全 WebView 版本通用。
+     不用 100dvh——旧 WebView 不认识这个单位会整条丢弃，布局直接散架 */
+  height: 100%;
   transition: grid-template-columns .3s ease; /* 安静地跟随，无花哨动画 */
 }
 .app.menu-open { grid-template-columns: var(--menu-w-expanded) 1fr 0px; }
@@ -239,7 +241,7 @@ dialog {
   padding: 18px; max-width: 420px; width: 88%;
   /* 高度也锁死：最多占视口 88%，超出在框内滚，不顶出屏幕、不带动背景 */
   max-height: 88vh;                 /* 老内核兜底 */
-  max-height: 88dvh;                /* 动态视口：软键盘弹出也不会被顶出去 */
+  max-height: 88%;                  /* 相对窗口：软键盘弹出/窗口模式也不会被顶出去 */
   overflow-y: auto;
   overscroll-behavior: contain;     /* 滚到头就停，不把滚动链给背景页 */
   font-size: var(--font-base); line-height: var(--line-base); color: var(--label-primary);
@@ -276,7 +278,7 @@ dialog textarea { resize: vertical; }
 /* ---------- 响应式：手机（<768）——左右抽屉，互斥 ---------- */
 @media (max-width: 767px) {
   /* block 布局下 .chat 不在 grid 里，必须显式给高度，否则消息一多就整页滚 */
-  .app { display: block; position: relative; height: 100dvh; overflow: hidden; }
+  .app { display: block; position: relative; height: 100%; overflow: hidden; }
   .chat { height: 100%; }
   .menu, .debug {
     position: fixed; top: 0; bottom: 0; width: 280px; z-index: 10;
