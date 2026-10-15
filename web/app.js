@@ -930,6 +930,8 @@ function addBubble(who, text) {
 
 // ---------- 聊天（流式） ----------
 let replying = false;
+let activeAbort = null;   // 当前请求的中止器：卡住时「停止」按钮靠它掐断
+let stopRequested = false; // 区分"用户主动停止"和"6 分钟兜底超时"
 async function send() {
   const input = $('#chat-input');
   const text = input.value.trim();
@@ -939,11 +941,15 @@ async function send() {
   addBubble('me', text);
 
   replying = true;
+  stopRequested = false;
+  const sendBtn = $('#btn-send');
+  sendBtn.textContent = t('chat.stop'); // 进行中按钮变「停止」，随时可掐
   const dot = $('#chat-dot');
   dot.className = 'dot dot-run'; // 蓝色 = 进行中
   // 兜底保险：6 分钟没有任何结果就主动掐断，绝不把输入框永久卡死
   const abort = new AbortController();
-  const hardStop = setTimeout(() => abort.abort(), 6 * 60 * 1000);
+  activeAbort = abort;
+  const hardStop = setTimeout(() => { stopRequested = true; abort.abort(); }, 6 * 60 * 1000);
   // AI 气泡带"思考区 + 回答区"，思考用浅色小字展示在回答上方
   const aiBubble = (() => {
     const msgs = $('#chat-messages');
@@ -1034,14 +1040,30 @@ async function send() {
     }
     if (!full && aiBubble.t.textContent === '…' && aiBubble.thText.textContent === '') aiBubble.t.textContent = t('chat.no_reply');
   } catch (e) {
-    // 主动掐断（6 分钟兜底）给人话解释；其余照常显示错误
-    aiBubble.t.textContent = (e?.name === 'AbortError') ? t('chat.gave_up') : e.message;
+    if (e?.name === 'AbortError') {
+      // 主动停止：气泡保留（含已生成的部分内容），只补一句状态
+      if (stopRequested) {
+        aiBubble.t.innerHTML += '<span class="chat-stopped">' + t('chat.stopped') + '</span>';
+      } else {
+        aiBubble.t.textContent = t('chat.gave_up');
+      }
+    } else {
+      aiBubble.t.textContent = e.message; // 其余错误照常显示
+    }
   } finally {
     clearTimeout(hardStop);
     clearTimeout(waitingTimer);
     replying = false;
+    activeAbort = null;
+    sendBtn.textContent = t('chat.send'); // 按钮变回「发送」
     dot.className = 'dot dot-ok'; // 绿色 = 正常
   }
+}
+
+// 「停止」：掐断当前请求。气泡和已生成的部分内容都保留，输入框立即可再用
+function stopChat() {
+  stopRequested = true;
+  if (activeAbort) activeAbort.abort();
 }
 
 // ---------- 新建智能体 ----------
@@ -1126,9 +1148,12 @@ async function init() {
   $('#btn-debug-close').addEventListener('click', () => setDebug(false));
   $('#overlay').addEventListener('click', () => { setMenu(false); setDebug(false); });
 
-  $('#btn-send').addEventListener('click', send);
+  $('#btn-send').addEventListener('click', () => {
+    if (replying) stopChat();
+    else send();
+  });
   $('#chat-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); send(); }
+    if (e.key === 'Enter') { e.preventDefault(); if (!replying) send(); }
   });
 
   $('#btn-new').addEventListener('click', () => $('#new-agent-dialog').showModal());

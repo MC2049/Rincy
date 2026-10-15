@@ -1,6 +1,6 @@
 {
   "name": "rincy",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "dependencies": {
     "busboy": "^1.6.0",
     "tar": "^7.5.22"

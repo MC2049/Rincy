@@ -440,3 +440,6 @@ dialog.wide-dialog { max-width: 480px; width: 92%; }
   pointer-events: none;
 }
 .toast.show { opacity: 1; transform: translateY(0); }
+
+/* 停止后的状态小字：跟在气泡正文后面，弱化显示 */
+.chat-stopped { display: inline-block; margin-left: 8px; color: var(--label-3, #999); font-size: .85em; }
