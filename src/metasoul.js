@@ -1,5 +1,5 @@
 // metasoul.js — 元灵（MetaSoul）：内置的「智能体们的智能体」
-// 它是一个普通智能体目录（agents/agent-meta/），但有三个特权：
+// 它是一个普通智能体目录（agents/metasoul/），但有三个特权：
 //   ① 聊天时系统注入所有其它智能体的完整内容快照（读）
 //   ② 回复里可以带 ```metasoul 写回块，服务器替它落盘（写）
 //   ③ builtin: true —— 删除接口直接拒绝（不能删除）
@@ -9,9 +9,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const METASOUL_ID = 'agent-meta';
-// 历史遗留 id：老版本用 'metasoul'，启动时自动改名迁移
-const LEGACY_IDS = ['metasoul'];
+const METASOUL_ID = 'metasoul';
+// 历史遗留 id：曾短暂改用过 'agent-meta'，启动时自动改名迁回
+const LEGACY_IDS = ['agent-meta'];
 const METASOUL_NAME = '元灵';
 
 // 写回白名单：这些文件允许元灵改
@@ -48,7 +48,7 @@ function defaultMeta() {
 // 确保元灵存在且身份字段没被篡改（启动时 + 导入智能体后调用）
 // config 由调用方传入（config.js 也 require 本模块，避免循环依赖）
 function ensureMetasoul(AGENTS_DIR, config) {
-  // 迁移：老版本的 agents/metasoul/ 改名为 agents/agent-meta/（历史与记忆全保留）
+  // 迁移：agents/agent-meta/（短暂用过的 id）改回 agents/metasoul/，历史与记忆全保留
   for (const legacy of LEGACY_IDS) {
     const from = path.join(AGENTS_DIR, legacy);
     const to = path.join(AGENTS_DIR, METASOUL_ID);
