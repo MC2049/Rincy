@@ -40,16 +40,21 @@ async function chatStream({ modelConf, messages, params, onDelta, onThought, sig
   const headers = { 'Content-Type': 'application/json' };
   if (provider === 'cloud') headers.Authorization = `Bearer ${apiKey}`;
 
-  // 兜底超时：模型 5 分钟没响应就放弃，绝不永远停在"思考中"
-  // （调用方传了 signal 就尊重调用方的；否则用自带的 5 分钟定时器）
-  let fetchSignal = signal;
-  let timedOut = false;
-  if (!fetchSignal) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, 5 * 60 * 1000);
-    if (typeof timer.unref === 'function') timer.unref();
-    fetchSignal = ctrl.signal;
+  // 两级超时，把"网络不通"和"模型慢"区分开，绝不永远停在"思考中"：
+  // ① 25 秒等不到响应头 → 大概率端点被拦（实测：握手通、GET 秒回、
+  //    但推理请求的响应被网络静默吞掉）——快速失败并说清楚；
+  // ② 5 分钟总上限 → 流式进行中太慢才放弃。
+  // 调用方传了 signal 就同时尊重它。
+  const ctrl = new AbortController();
+  let phase = '连接中';
+  if (signal) {
+    if (signal.aborted) ctrl.abort();
+    else signal.addEventListener('abort', () => ctrl.abort(), { once: true });
   }
+  const headersTimer = setTimeout(() => { phase = '等待响应'; ctrl.abort(); }, 25 * 1000);
+  const overallTimer = setTimeout(() => { phase = '响应超时'; ctrl.abort(); }, 5 * 60 * 1000);
+  if (typeof headersTimer.unref === 'function') headersTimer.unref();
+  if (typeof overallTimer.unref === 'function') overallTimer.unref();
 
   let res;
   try {
@@ -57,14 +62,29 @@ async function chatStream({ modelConf, messages, params, onDelta, onThought, sig
       method: 'POST',
       headers,
       body: JSON.stringify(body),
-      signal: fetchSignal,
+      signal: ctrl.signal,
     });
+    // 响应头到了：清掉"连不上"判定，只留总上限
+    clearTimeout(headersTimer);
   } catch (e) {
-    if (timedOut || e?.name === 'TimeoutError' || e?.name === 'AbortError') {
-      throw new Error('模型 5 分钟都没回话，先放弃了。可以再试一次，或把「回答长度」调小一点。');
+    clearTimeout(headersTimer);
+    clearTimeout(overallTimer);
+    if (e?.name === 'TimeoutError' || e?.name === 'AbortError') {
+      if (phase === '等待响应') {
+        throw new Error('连不上模型端点：25 秒内没有任何响应字节。'
+          + '你的网络到「' + baseUrl + '」的推理请求被拦了（握手能通但响应收不到）。'
+          + '换一个国内可达的接口（如智谱 open.bigmodel.cn），或给手机配代理。');
+      }
+      if (phase === '响应超时') {
+        throw new Error('模型 5 分钟都没回话，先放弃了。可以再试一次，或把「回答长度」调小一点。');
+      }
+      throw new Error('连接模型端点失败（' + (baseUrl || '未知地址') + '）。');
     }
     throw new Error('连不上模型接口：' + (e?.message || e));
   }
+  // 流结束后清总上限
+  const clearOverall = () => clearTimeout(overallTimer);
+  res.body.getReader().closed.then(clearOverall, clearOverall);
 
   if (!res.ok || !res.body) {
     let detail = '';

@@ -1,0 +1,25 @@
+{
+  "theme": {
+    "mode": "preset",
+    "preset": "ocean",
+    "accent": ""
+  },
+  "models": [
+    {
+      "id": "model-cloud",
+      "name": "云端默认",
+      "provider": "cloud",
+      "baseUrl": "https://api.openai.com",
+      "apiKey": "",
+      "model": ""
+    },
+    {
+      "id": "model-local",
+      "name": "本地默认",
+      "provider": "local",
+      "baseUrl": "http://127.0.0.1:11434",
+      "apiKey": "",
+      "model": ""
+    }
+  ]
+}
