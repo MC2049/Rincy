@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>Rincy</title>
-<link rel="stylesheet" href="/style.css?v=1.0.7">
+<link rel="stylesheet" href="/style.css?v=1.0.8">
 </head>
 <body>
 <div class="app" id="app">
@@ -352,6 +352,28 @@
   </div>
 </dialog>
 
-<script src="/app.js?v=1.0.7"></script>
+<script>
+// 启动兜底（刻意用最老语法）：脚本失败直接给出可见原因，绝不无声无息
+window.__bootErr = function (msg) {
+  try {
+    var b = document.createElement('div');
+    b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#b3261e;color:#fff;padding:10px 14px;font:14px/1.5 sans-serif;';
+    b.textContent = msg;
+    document.body.appendChild(b);
+  } catch (e) {}
+};
+window.addEventListener('error', function (e) {
+  window.__bootErr('页面脚本出错：' + (e && e.message ? e.message : '未知') + '（WebView 内核可能过旧，请更新系统 WebView）');
+}, true);
+// 核心能力缺失 = 内核太旧，前端必然罢工
+setTimeout(function () {
+  var miss = [];
+  if (!window.fetch) miss.push('fetch');
+  if (!window.AbortController) miss.push('AbortController');
+  if (!window.Promise || !Promise.prototype.finally) miss.push('Promise.finally');
+  if (miss.length) window.__bootErr('浏览器内核缺少能力：' + miss.join(', ') + '。WebView 版本过旧，请更新「系统 WebView」或系统。');
+}, 300);
+</script>
+<script src="/app.js?v=1.0.8"></script>
 </body>
 </html>

@@ -14,8 +14,8 @@ const state = { agents: [], currentId: null, paramDefs: [], settings: null, para
 const i18nState = { lang: 'zh-CN', dict: {}, base: {} };
 
 function t(key, vars) {
-  let s = i18nState.dict[key] ?? i18nState.base[key] ?? key;
-  if (vars) for (const [k, v] of Object.entries(vars)) s = s.replaceAll('{' + k + '}', String(v));
+  let s = i18nState.dict[key] !== undefined ? i18nState.dict[key] : (i18nState.base[key] !== undefined ? i18nState.base[key] : key);
+  if (vars) for (const [k, v] of Object.entries(vars)) s = s.split('{' + k + '}').join(String(v));
   return s;
 }
 
@@ -53,7 +53,7 @@ async function changeLanguage(code) {
 
 function renderLangList() {
   const sel = $('#sel-lang');
-  const current = state.settings?.language || 'zh-CN';
+  const current = (state.settings && state.settings.language) || 'zh-CN';
   api('/api/langs').then(({ langs }) => {
     sel.innerHTML = '';
     for (const l of langs) {
@@ -107,8 +107,8 @@ function saveState() {
 function loadState() {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem('rincy-ui') || 'null'); } catch { saved = null; }
-  const menuOpen = typeof saved?.menuOpen === 'boolean' ? saved.menuOpen : false;
-  const debugOpen = typeof saved?.debugOpen === 'boolean' ? saved.debugOpen : false;
+  const menuOpen = typeof (saved && saved.menuOpen) === 'boolean' ? saved.menuOpen : false;
+  const debugOpen = typeof (saved && saved.debugOpen) === 'boolean' ? saved.debugOpen : false;
   setMenu(menuOpen, false);
   setDebug(debugOpen, false);
 }
@@ -233,7 +233,7 @@ function renderSliders() {
     if (!els.length) continue;
     for (const el of els) {
       el.min = p.min; el.max = p.max; el.step = p.step;
-      el.value = state.params[p.name] ?? p.def;
+      el.value = state.params[p.name] !== undefined ? state.params[p.name] : p.def;
     }
   }
 }
@@ -274,11 +274,11 @@ function bindSliders() {
 
 // ---------- 开关（孟婆 / 权限） ----------
 function renderSwitches(agent) {
-  $('#sw-mengpo').checked = agent.memory_warden?.enabled ?? false;
+  $('#sw-mengpo').checked = (agent.memory_warden && agent.memory_warden.enabled) === true;
   $('#speed-row').hidden = !$('#sw-mengpo').checked; // 孟婆关闭时遗忘速度不显示
-  $('#sel-speed').value = agent.memory_warden?.speed || 'standard';
-  $('#sw-self-edit').checked = agent.soul?.self_edit ?? false;
-  $('#sw-history-visible').checked = agent.history?.visible ?? true;
+  $('#sel-speed').value = (agent.memory_warden && agent.memory_warden.speed) || 'standard';
+  $('#sw-self-edit').checked = (agent.soul && agent.soul.self_edit) === true;
+  $('#sw-history-visible').checked = (agent.history && agent.history.visible) !== false;
 }
 
 function bindSwitches() {
@@ -335,7 +335,7 @@ function renderChoices(agent) {
   $$('[data-behavior]').forEach((row) => {
     const key = row.dataset.behavior;
     row.querySelectorAll('.tag-btn').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.value === (b[key] ?? ''));
+      btn.classList.toggle('active', btn.dataset.value === (b[key] !== undefined ? b[key] : ''));
     });
   });
 }
@@ -434,7 +434,7 @@ function renderTextFields(agent) {
 }
 
 function flashSaved(el) {
-  const hint = el.closest('.field')?.querySelector('.saved-hint');
+  const hint = (el.closest('.field') && el.closest('.field').querySelector('.saved-hint'));
   if (!hint) return;
   hint.textContent = t('common.saved');
   clearTimeout(hint._t);
@@ -473,7 +473,7 @@ function bindTextFields() {
 function renderAgentModel() {
   const sel = $('#sel-agent-model');
   sel.innerHTML = '';
-  const models = state.settings?.models || [];
+  const models = (state.settings && state.settings.models) || [];
   if (!models.length) {
     const o = document.createElement('option');
     o.value = ''; o.textContent = t('system.model_empty');
@@ -486,9 +486,9 @@ function renderAgentModel() {
       sel.append(o);
     }
   }
-  sel.value = state.agent?.model_id || '';
+  sel.value = (state.agent && state.agent.model_id) || '';
   // 元灵没显式选模型时，后端会自动继承模型库里第一个可用模型——如实显示
-  if (state.agent?.builtin && !state.agent?.model_id && models.length) {
+  if ((state.agent && state.agent.builtin) && !(state.agent && state.agent.model_id) && models.length) {
     const o = document.createElement('option');
     o.value = '';
     o.textContent = t('system.model_auto');
@@ -556,7 +556,7 @@ async function renderCssThemeList() {
 }
 
 function saveCssTheme(name) {
-  const curTheme = state.settings?.theme || {};
+  const curTheme = (state.settings && state.settings.theme) || {};
   api('/api/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -621,7 +621,7 @@ function renderSettingsDialog() {
 }
 
 function renderThemeUI() {
-  const t = state.settings?.theme || {};
+  const t = (state.settings && state.settings.theme) || {};
   $$('#theme-row .swatch').forEach((sw) => {
     sw.classList.toggle('active', t.mode === 'preset' && sw.dataset.preset === t.preset);
   });
@@ -633,7 +633,7 @@ function saveTheme(patch) {
   api('/api/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ theme: { ...(state.settings?.theme || {}), ...patch } }),
+    body: JSON.stringify({ theme: { ...((state.settings && state.settings.theme) || {}), ...patch } }),
   }).then(({ settings }) => {
     state.settings = settings;
     applyTheme(settings.theme);
@@ -647,7 +647,7 @@ function saveTheme(patch) {
 function renderModelList() {
   const box = $('#model-list');
   box.innerHTML = '';
-  const models = state.settings?.models || [];
+  const models = (state.settings && state.settings.models) || [];
   if (!models.length) {
     const empty = document.createElement('div');
     empty.className = 'model-empty';
@@ -1040,7 +1040,7 @@ async function send() {
     }
     if (!full && aiBubble.t.textContent === '…' && aiBubble.thText.textContent === '') aiBubble.t.textContent = t('chat.no_reply');
   } catch (e) {
-    if (e?.name === 'AbortError') {
+    if (e && e.name === 'AbortError') {
       // 主动停止：气泡保留（含已生成的部分内容），只补一句状态
       if (stopRequested) {
         aiBubble.t.innerHTML += '<span class="chat-stopped">' + t('chat.stopped') + '</span>';
@@ -1116,7 +1116,7 @@ async function init() {
 
   await loadSettings();
   // 语言先行：先铺字典再渲染任何 UI 文本
-  await loadLangDict(state.settings?.language);
+  await loadLangDict((state.settings && state.settings.language));
   applyI18n();
 
   loadState();
@@ -1128,8 +1128,8 @@ async function init() {
   bindSettingsDialog();
   bindAddModelDialog();
   bindLangAndCssTheme();
-  applyTheme(state.settings?.theme);
-  await applyCssTheme(state.settings?.theme?.css_name || '');
+  applyTheme((state.settings && state.settings.theme));
+  await applyCssTheme(((state.settings && state.settings.theme && state.settings.theme.css_name) || ''));
   renderLangList();
   await renderCssThemeList();
   api('/api/version').then(({ version }) => {
