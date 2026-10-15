@@ -122,7 +122,18 @@ async function handleChat(req, res) {
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive',
   });
-  const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  // 客户端断开（刷新页面/前端 6 分钟兜底中止）时不许炸进程：
+  // ① 吞掉连接上的 error 事件；② 断开后中止上游模型请求，别浪费 token
+  req.on('error', () => {});
+  res.on('error', () => {});
+  const upstreamAbort = new AbortController();
+  res.on('close', () => {
+    if (!res.writableEnded) upstreamAbort.abort();
+  });
+  const send = (event, data) => {
+    if (res.destroyed || res.writableEnded) return;
+    try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* 连接已断 */ }
+  };
 
   // 这个对话选用的模型配置（模型库里的某条）
   let modelConf = config.getAgentModel(meta);
@@ -155,6 +166,7 @@ async function handleChat(req, res) {
       modelConf,
       messages,
       params,
+      signal: upstreamAbort.signal,
       onDelta: (d) => send('delta', { text: d }),
       onThought: (t) => send('thought', { text: t }),
     });
@@ -545,4 +557,18 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Rincy 已启动：http://127.0.0.1:${PORT}`);
+});
+
+// ---------- 进程级保命（聊天应用的纪律：任何情况都不许整个服务死掉） ----------
+// 背景：SSE 流式中客户端断开（刷新页面/中止请求）时，往已销毁的套接字写数据
+// 会触发流上的 error 事件——它不在任何 try/catch 的调用栈里，直接杀死进程。
+// 设备上实测：服务反复崩溃-复活，用户点发送正好撞上死窗口，全部失败。
+process.on('uncaughtException', (e) => {
+  console.error('[server] 未捕获异常（已吞掉，服务继续）：', e);
+});
+process.on('unhandledRejection', (e) => {
+  console.error('[server] 未处理的 Promise 拒绝（已吞掉，服务继续）：', e);
+});
+server.on('clientError', (err, socket) => {
+  try { socket.end('HTTP/1.1 400 Bad Request\r\n\r\n'); } catch { socket.destroy(); }
 });
