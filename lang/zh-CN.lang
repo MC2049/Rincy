@@ -195,3 +195,5 @@ chat.waiting = 模型还在想，请稍等…
 chat.gave_up = 等了 6 分钟没结果，先停了。可以再试一次，或在"设置"里换个模型。
 chat.stop = 停止
 chat.stopped = （已停止）
+common.svc_no_reply = 服务 15 秒没有响应——Rincy 应用可能被系统冻结在后台，请切回 Rincy 再试
+common.boot_fail = 界面初始化失败，正在自动重试：{e}（若持续出现，请切回 Rincy 应用保持前台，或重启应用）

@@ -67,10 +67,25 @@ function renderLangList() {
 }
 
 async function api(path, opts) {
-  const res = await fetch(path, opts);
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error || t('common.request_fail', { code: res.status }));
-  return json;
+  // 15 秒兜底：服务无响应（常见于应用被系统后台冻结）时快速失败并提示，
+  // 绝不让 init 无声挂住、把整个界面卡成"点什么都不动"
+  let ctrl = null, timer = null;
+  if (typeof AbortController !== 'undefined') {
+    ctrl = new AbortController();
+    timer = setTimeout(function () { ctrl.abort(); }, 15000);
+    opts = Object.assign({}, opts, { signal: ctrl.signal });
+  }
+  try {
+    const res = await fetch(path, opts);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || t('common.request_fail', { code: res.status }));
+    return json;
+  } catch (e) {
+    if (e && e.name === 'AbortError') throw new Error(t('common.svc_no_reply'));
+    throw e;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 // ---------- 折叠交互（状态存 localStorage，刷新保持） ----------
@@ -1148,14 +1163,6 @@ async function init() {
   $('#btn-debug-close').addEventListener('click', () => setDebug(false));
   $('#overlay').addEventListener('click', () => { setMenu(false); setDebug(false); });
 
-  $('#btn-send').addEventListener('click', () => {
-    if (replying) stopChat();
-    else send();
-  });
-  $('#chat-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); if (!replying) send(); }
-  });
-
   $('#btn-new').addEventListener('click', () => $('#new-agent-dialog').showModal());
   $('#btn-new-create').addEventListener('click', () => createAgent().catch((e) => alert(e.message)));
   $('#btn-settings').addEventListener('click', openSettingsDialog); // 设置 = 全局设置
@@ -1169,6 +1176,37 @@ async function init() {
   if (state.agents.length) await selectAgent(state.agents[0].id);
 }
 
-init().catch((e) => {
-  document.body.innerHTML = `<p style="color:#c00;padding:20px;">${t('common.init_fail', { e: e.message })}</p>`;
+
+// —— 立即绑定（刻意在 init 之前生效）：数据没加载完、甚至服务无响应时，
+//    发送/停止也必须可点，界面永不"无声全死" ——
+$('#btn-send').addEventListener('click', () => {
+  if (replying) stopChat();
+  else send();
 });
+$('#chat-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); if (!replying) send(); }
+});
+
+let initRetryTimer = null;
+function bootBanner(msg) {
+  var b = document.getElementById('boot-banner');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'boot-banner';
+    b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#b3261e;color:#fff;padding:10px 14px;font:14px/1.5 sans-serif;';
+    document.body.appendChild(b);
+  }
+  b.textContent = msg;
+}
+function bootBannerClear() {
+  var b = document.getElementById('boot-banner');
+  if (b && b.parentNode) b.parentNode.removeChild(b);
+}
+function bootInit() {
+  if (initRetryTimer) { clearTimeout(initRetryTimer); initRetryTimer = null; }
+  init().then(bootBannerClear).catch((e) => {
+    bootBanner(t('common.boot_fail', { e: e.message }));
+    initRetryTimer = setTimeout(bootInit, 5000); // 切回应用/恢复后自动重试
+  });
+}
+bootInit();
