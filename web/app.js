@@ -845,6 +845,19 @@ function bindAddModelDialog() {
   $('#btn-am-save').addEventListener('click', () => saveNewModel().catch((e) => alert(e.message)));
 }
 
+// ---------- 清除记忆（对当前选中的智能体生效，所有智能体都可用） ----------
+function bindClearMemory() {
+  $('#btn-clear-memory').addEventListener('click', async () => {
+    if (!state.currentId) { alert(t('chat.no_agent')); return; }
+    const a = state.agents.find((x) => x.id === state.currentId);
+    const name = a ? a.name : state.currentId;
+    if (!confirm(t('mem.confirm', { name }))) return;
+    await api(`/api/agents/${encodeURIComponent(state.currentId)}/clear`, { method: 'POST' });
+    toast(t('mem.done'));
+    await loadHistory();
+  });
+}
+
 // ---------- 聊天记录（从完整本地存档渲染） ----------
 async function loadHistory() {
   if (!state.currentId) return;
@@ -1156,6 +1169,7 @@ async function init() {
   bindChoices();
   bindAgentModel();
   bindTextFields();
+  bindClearMemory();
   bindSettingsDialog();
   bindAddModelDialog();
   bindLangAndCssTheme();

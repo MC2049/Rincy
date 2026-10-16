@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>Rincy</title>
-<link rel="stylesheet" href="/style.css?v=1.0.11">
+<link rel="stylesheet" href="/style.css?v=1.1.0">
 </head>
 <body>
 <div class="app" id="app">
@@ -124,6 +124,7 @@
               <input type="number" class="num-input" data-param="context_recent_count" min="1" max="50" step="1" value="10">
             </div>
           </div>
+          <button class="pill-btn ghost" id="btn-clear-memory" data-i18n="mem.clear">清除记忆</button>
           <label class="switch-row"><input type="checkbox" id="sw-mengpo"> <span data-i18n="memory.warden">开启孟婆系统</span></label>
           <div class="speed-row" id="speed-row" hidden>
             <span data-i18n="memory.speed">遗忘速度</span>
@@ -374,6 +375,6 @@ setTimeout(function () {
   if (miss.length) window.__bootErr('浏览器内核缺少能力：' + miss.join(', ') + '。WebView 版本过旧，请更新「系统 WebView」或系统。');
 }, 300);
 </script>
-<script src="/app.js?v=1.0.11"></script>
+<script src="/app.js?v=1.1.0"></script>
 </body>
 </html>

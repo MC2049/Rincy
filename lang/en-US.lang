@@ -197,3 +197,6 @@ chat.stop = Stop
 chat.stopped = (stopped)
 common.svc_no_reply = No response from service for 15s — the Rincy app may be frozen in background. Switch back to Rincy and retry
 common.boot_fail = UI init failed, retrying: {e} (if persistent, keep the Rincy app in foreground or restart it)
+mem.clear = Clear memory
+mem.confirm = Clear all conversation memory of "{name}"?\nChat history will be emptied and layered memory rebuilt (persona and config untouched).
+mem.done = Memory cleared

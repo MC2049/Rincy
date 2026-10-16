@@ -384,7 +384,7 @@ const server = http.createServer(async (req, res) => {
 
       if (action === 'history' && req.method === 'GET') {
         // 查看历史存档（界面"查看历史存档"入口；受 history.visible 控制）
-        if (!meta.history?.visible) { sendJSON(res, 403, { error: '这个智能体关闭了历史存档查看' }); return; }
+        if (meta.history && meta.history.visible === false) { sendJSON(res, 403, { error: '这个智能体关闭了历史存档查看' }); return; }
         sendJSON(res, 200, { history: memory.readHistory(config.agentDir(id)) });
         return;
       }
