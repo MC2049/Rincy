@@ -82,9 +82,7 @@ async function chatStream({ modelConf, messages, params, onDelta, onThought, sig
     }
     throw new Error('连不上模型接口：' + (e?.message || e));
   }
-  // 流结束后清总上限
-  const clearOverall = () => clearTimeout(overallTimer);
-  res.body.getReader().closed.then(clearOverall, clearOverall);
+  // （总上限定时器在读循环的 finally 里清理——此处绝不能再 getReader，会把流锁死）
 
   if (!res.ok || !res.body) {
     let detail = '';
@@ -97,29 +95,36 @@ async function chatStream({ modelConf, messages, params, onDelta, onThought, sig
   // （delta.reasoning_content），最后才给正式回答（delta.content）。
   // 只把 content 当正式回复推给用户；思考过程不展示。若 content 为空
   // （多是 maxReplyTokens 被思考过程耗尽），给一个人话提示而非空回复。
+  // 注意：getReader() 只能调用一次——再调会抛 "ReadableStream is locked"。
   const reader = res.body.getReader();
+  const clearOverall = () => clearTimeout(overallTimer);
+  reader.closed.then(clearOverall, clearOverall); // 流结束/中断时清掉 5 分钟总上限
   const decoder = new TextDecoder();
   let buffer = '';
   let full = '',
     thought = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-    for (const line of lines) {
-      const t = line.trim();
-      if (!t.startsWith('data:')) continue;
-      const payload = t.slice(5).trim();
-      if (!payload || payload === '[DONE]') continue;
-      try {
-        const json = JSON.parse(payload);
-        const delta = json.choices?.[0]?.delta || {};
-        if (delta.content) { full += delta.content; onDelta(delta.content); }
-        if (delta.reasoning_content) { thought += delta.reasoning_content; if (onThought) onThought(delta.reasoning_content); }
-      } catch { /* 忽略无法解析的行（心跳/注释） */ }
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t.startsWith('data:')) continue;
+        const payload = t.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        try {
+          const json = JSON.parse(payload);
+          const delta = json.choices?.[0]?.delta || {};
+          if (delta.content) { full += delta.content; onDelta(delta.content); }
+          if (delta.reasoning_content) { thought += delta.reasoning_content; if (onThought) onThought(delta.reasoning_content); }
+        } catch { /* 忽略无法解析的行（心跳/注释） */ }
+      }
     }
+  } finally {
+    clearOverall();
   }
   // 思考吐了一堆但正式回答为空 → 很可能是"回答长度"太小被思考吃光
   if (!full && thought) {
