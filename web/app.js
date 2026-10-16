@@ -950,7 +950,12 @@ let stopRequested = false; // 区分"用户主动停止"和"6 分钟兜底超时
 async function send() {
   const input = $('#chat-input');
   const text = input.value.trim();
-  if (!text || replying) return;
+  if (!text) return;
+  if (replying) {
+    // 自愈：历史请求已无活跃 abort（曾被异常卡死）就强制复位，绝不让界面无声卡死
+    if (!activeAbort) replying = false;
+    else return; // 正常进行中：等停止或完成
+  }
   if (!state.currentId) { alert(t('chat.no_agent')); return; }
   input.value = '';
   addBubble('me', text);
@@ -958,43 +963,47 @@ async function send() {
   replying = true;
   stopRequested = false;
   const sendBtn = $('#btn-send');
-  sendBtn.textContent = t('chat.stop'); // 进行中按钮变「停止」，随时可掐
   const dot = $('#chat-dot');
-  dot.className = 'dot dot-run'; // 蓝色 = 进行中
-  // 兜底保险：6 分钟没有任何结果就主动掐断，绝不把输入框永久卡死
+  if (sendBtn) sendBtn.textContent = t('chat.stop'); // 进行中按钮变「停止」
+  if (dot) dot.className = 'dot dot-run';
+
+  // —— 从这里起全部纳入同一个 try/finally：任何一步抛错，
+  //    finally 都会复位 replying/按钮/圆点，界面永不被楔死 ——
   const abort = new AbortController();
   activeAbort = abort;
   const hardStop = setTimeout(() => { stopRequested = true; abort.abort(); }, 6 * 60 * 1000);
-  // AI 气泡带"思考区 + 回答区"，思考用浅色小字展示在回答上方
-  const aiBubble = (() => {
-    const msgs = $('#chat-messages');
-    const hint = msgs.querySelector('.empty-hint');
-    if (hint) hint.remove();
-    const div = document.createElement('div');
-    div.className = 'bubble ai';
-    const th = document.createElement('div');
-    th.className = 'thought';
-    th.hidden = false; // 一开始就可见：让"思考中…"成为明确状态，而不是无声等待
-    th.innerHTML = '<span class="thought-label">' + t('chat.thinking') + '</span> <span class="thought-text"></span>';
-    const t = document.createElement('div');
-    t.className = 'text';
-    t.textContent = t('chat.thinking');
-    div.append(th, t);
-    msgs.append(div);
-    const thText = th.querySelector('.thought-text');
-    msgs.scrollTop = msgs.scrollHeight;
-    return { div, th, thText, t };
-  })();
-  // 20 秒还没等到第一个字节就把状态说清楚（"思考中"→"模型还在想"）
-  let gotAnything = false;
-  const waitingTimer = setTimeout(() => {
-    if (!gotAnything) {
-      aiBubble.thText.textContent = t('chat.waiting');
-      msgs.scrollTop = msgs.scrollHeight;
-    }
-  }, 20000);
-
+  let waitingTimer = null;
+  let aiBubble = null;
   try {
+    // AI 气泡带"思考区 + 回答区"，思考用浅色小字展示在回答上方
+    aiBubble = (() => {
+      const msgs = $('#chat-messages');
+      const hint = msgs.querySelector('.empty-hint');
+      if (hint) hint.remove();
+      const div = document.createElement('div');
+      div.className = 'bubble ai';
+      const th = document.createElement('div');
+      th.className = 'thought';
+      th.hidden = false; // 一开始就可见："思考中…"是明确状态，不是无声等待
+      th.innerHTML = '<span class="thought-label">' + t('chat.thinking') + '</span> <span class="thought-text"></span>';
+      const tb = document.createElement('div');
+      tb.className = 'text';
+      tb.textContent = t('chat.thinking');
+      div.append(th, tb);
+      msgs.append(div);
+      const thText = th.querySelector('.thought-text');
+      msgs.scrollTop = msgs.scrollHeight;
+      return { div, th, thText, t: tb };
+    })();
+    // 20 秒还没等到第一个字节就把状态说清楚（"思考中"→"模型还在想"）
+    let gotAnything = false;
+    waitingTimer = setTimeout(() => {
+      if (!gotAnything && aiBubble) {
+        aiBubble.thText.textContent = t('chat.waiting');
+        $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
+      }
+    }, 20000);
+
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1012,7 +1021,7 @@ async function send() {
       const j = JSON.parse(payload);
       if (!gotAnything) {
         gotAnything = true;
-        clearTimeout(waitingTimer);
+        if (waitingTimer) clearTimeout(waitingTimer);
         aiBubble.thText.textContent = '';
         aiBubble.t.textContent = '';
       }
@@ -1023,14 +1032,12 @@ async function send() {
       } else if (curEvent === 'delta' && j.text) {
         full += j.text; aiBubble.t.innerHTML = renderMarkdown(full); stickToBottom();
       } else if (curEvent === 'metasoul' && (j.applied || j.errors)) {
-        // 元灵写回结果：成功 toast + 刷新列表（别的智能体文件变了）
         if (j.applied && j.applied.length) {
           toast(t('metasoul.toast', { n: j.applied.length }));
           refreshAgents();
         }
         if (j.errors && j.errors.length) toast(t('metasoul.fail', { e: j.errors[0].error }));
       } else if (curEvent === 'done' && typeof j.full === 'string') {
-        // 用服务端清理过的正文替换气泡（去掉写回块，只留给人看的话）
         aiBubble.t.innerHTML = renderMarkdown(j.full) || '…';
         if (j.applied && j.applied.length) refreshAgents();
       } else if (j.message) {
@@ -1050,35 +1057,44 @@ async function send() {
         if (!t.startsWith('data:')) continue;
         const payload = t.slice(5).trim();
         if (!payload || payload === '[DONE]') continue;
-        try { handleData(payload); } catch { /* 忽略解析不了的行 */ }
+        try { handleData(payload); } catch (e2) { /* 忽略解析不了的行 */ }
       }
     }
     if (!full && aiBubble.t.textContent === '…' && aiBubble.thText.textContent === '') aiBubble.t.textContent = t('chat.no_reply');
   } catch (e) {
     if (e && e.name === 'AbortError') {
-      // 主动停止：气泡保留（含已生成的部分内容），只补一句状态
       if (stopRequested) {
-        aiBubble.t.innerHTML += '<span class="chat-stopped">' + t('chat.stopped') + '</span>';
-      } else {
+        if (aiBubble) aiBubble.t.innerHTML += '<span class="chat-stopped">' + t('chat.stopped') + '</span>';
+      } else if (aiBubble) {
         aiBubble.t.textContent = t('chat.gave_up');
       }
+    } else if (aiBubble) {
+      aiBubble.t.textContent = e.message; // 其余错误照常显示在气泡里
     } else {
-      aiBubble.t.textContent = e.message; // 其余错误照常显示
+      alert(e.message);
     }
   } finally {
     clearTimeout(hardStop);
-    clearTimeout(waitingTimer);
+    if (waitingTimer) clearTimeout(waitingTimer);
     replying = false;
     activeAbort = null;
-    sendBtn.textContent = t('chat.send'); // 按钮变回「发送」
-    dot.className = 'dot dot-ok'; // 绿色 = 正常
+    if (sendBtn) sendBtn.textContent = t('chat.send');
+    if (dot) dot.className = 'dot dot-ok';
   }
 }
 
 // 「停止」：掐断当前请求。气泡和已生成的部分内容都保留，输入框立即可再用
 function stopChat() {
   stopRequested = true;
-  if (activeAbort) activeAbort.abort();
+  if (activeAbort) {
+    activeAbort.abort(); // 有真实请求：掐断它，气泡保留已生成内容
+  } else {
+    // 没有活跃请求（历史卡死）：直接复位，按钮立刻变回「发送」
+    replying = false;
+    const sendBtn = $('#btn-send'), dot = $('#chat-dot');
+    if (sendBtn) sendBtn.textContent = t('chat.send');
+    if (dot) dot.className = 'dot dot-ok';
+  }
 }
 
 // ---------- 新建智能体 ----------
