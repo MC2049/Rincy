@@ -64,6 +64,55 @@ function parseHistory(md) {
   return out;
 }
 
+// 把条目数组写回完整存档（重生成/编辑消息时的历史裁剪用）
+function writeHistory(agentDir, entries) {
+  try {
+    fs.mkdirSync(path.dirname(historyFile(agentDir)), { recursive: true });
+    let md = '';
+    for (const e of entries) {
+      md += `\n## [${e.ts}] ${e.who}\n\n${e.text}\n`;
+    }
+    fs.writeFileSync(historyFile(agentDir), md, 'utf8');
+  } catch (e) {
+    console.error('[memory] 存档回写失败（不影响回复）：', e.message);
+  }
+}
+
+// 历史裁剪：
+//   popLastAI        → 去掉末尾的 AI 回复（重生成：同一条用户消息重新生成）
+//   popUserAndAfter  → 去掉最后一条用户消息及其后的所有内容（修改输入：编辑后重发）
+// lastUserText → 最后一条用户消息文本（重生成要用它当提示），无则空串
+function lastUserText(agentDir) {
+  try {
+    const entries = parseHistory(readHistory(agentDir));
+    for (let i = entries.length - 1; i >= 0; i--) {
+      if (entries[i].who === '用户') return entries[i].text;
+    }
+  } catch { /* 读不到就当没有 */ }
+  return '';
+}
+function popLastAI(agentDir) {
+  try {
+    const entries = parseHistory(readHistory(agentDir));
+    while (entries.length && entries[entries.length - 1].who !== '用户') entries.pop();
+    writeHistory(agentDir, entries);
+  } catch (e) {
+    console.error('[memory] 裁剪失败（不影响回复）：', e.message);
+  }
+}
+function popUserAndAfter(agentDir) {
+  try {
+    const entries = parseHistory(readHistory(agentDir));
+    let cut = entries.length;
+    for (let i = entries.length - 1; i >= 0; i--) {
+      if (entries[i].who === '用户') { cut = i; break; }
+    }
+    writeHistory(agentDir, entries.slice(0, cut));
+  } catch (e) {
+    console.error('[memory] 裁剪失败（不影响回复）：', e.message);
+  }
+}
+
 // ② 分层记忆重建（孟婆的核心）：
 //    近期记忆 = 最近 N 条完整带时间戳的对话（N = params.context_recent_count）
 //    中期记忆 = 再往前 M 条，压缩成摘要（M = N × 遗忘速度倍数；骨架版：截短，后续接模型摘要）
@@ -130,4 +179,4 @@ function clearHistory(agentDir, meta) {
   rebuildMemory(agentDir, meta);
 }
 
-module.exports = { appendHistory, readHistory, parseHistory, rebuildMemory, readMemory, clearHistory };
+module.exports = { appendHistory, readHistory, parseHistory, writeHistory, lastUserText, popLastAI, popUserAndAfter, rebuildMemory, readMemory, clearHistory };

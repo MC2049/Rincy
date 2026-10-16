@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>Rincy</title>
-<link rel="stylesheet" href="/style.css?v=1.1.0">
+<link rel="stylesheet" href="/style.css?v=1.2.0">
 </head>
 <body>
 <div class="app" id="app">
@@ -33,6 +33,11 @@
       <button class="icon-btn" id="btn-debug-toggle" title="收起/展开调试" data-i18n-title="chat.toggle_debug_title">▦</button>
     </header>
     <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-actions" id="chat-actions" hidden>
+      <button class="pill-btn ghost small" id="btn-regen" data-i18n="chat.regen">↻ 重新生成</button>
+      <button class="pill-btn ghost small" id="btn-edit-last" data-i18n="chat.edit_last">✎ 改上一条</button>
+      <span class="edit-hint" id="edit-hint" hidden></span>
+    </div>
     <div class="chat-input-row">
       <input class="chat-input" id="chat-input" placeholder="说点什么…" data-i18n-ph="chat.placeholder">
       <button class="pill-btn" id="btn-send" data-i18n="chat.send">发送</button>
@@ -234,6 +239,8 @@
           <label class="switch-row"><input type="checkbox" id="sw-self-edit"> <span data-i18n="perm.self_edit">允许智能体修改自己的人设</span></label>
           <label class="switch-row"><input type="checkbox" id="sw-history-visible"> <span data-i18n="perm.history">允许查看历史存档</span></label>
           <button class="pill-btn ghost" id="btn-view-config" data-i18n="perm.view_files">查看原始配置文件</button>
+          <button class="pill-btn ghost" id="btn-reset-metasoul" data-i18n="perm.reset_metasoul" hidden>重置元灵（恢复出厂）</button>
+          <button class="pill-btn ghost" id="btn-fork-agent" data-i18n="perm.fork">⎇ 分支此智能体</button>
         </div>
       </details>
 
@@ -375,6 +382,6 @@ setTimeout(function () {
   if (miss.length) window.__bootErr('浏览器内核缺少能力：' + miss.join(', ') + '。WebView 版本过旧，请更新「系统 WebView」或系统。');
 }, 300);
 </script>
-<script src="/app.js?v=1.1.0"></script>
+<script src="/app.js?v=1.2.0"></script>
 </body>
 </html>

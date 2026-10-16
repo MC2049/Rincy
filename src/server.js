@@ -101,14 +101,28 @@ async function handleChat(req, res) {
   try { body = JSON.parse(await readBody(req)); } catch { sendJSON(res, 400, { error: '请求格式不对' }); return; }
   const meta = body?.agentId ? config.readAgent(body.agentId) : null;
   if (!meta) { sendJSON(res, 404, { error: '找不到这个智能体' }); return; }
-  const text = String(body?.message || '').trim();
-  if (!text) { sendJSON(res, 400, { error: '消息不能为空' }); return; }
-
+  const regenerate = !!body?.regenerate; // 重生成：同一条用户消息换个回答
+  const editing = !!body?.edit;          // 修改输入：替换上一条用户消息及其回复
+  let text = String(body?.message || '').trim();
   const dir = config.agentDir(meta.id);
   const isSoul = metasoul.isMetasoul(meta);
 
+  if (regenerate) {
+    // 去掉末尾的 AI 回复，用最后一条用户消息重新生成（不新增用户消息）
+    memory.popLastAI(dir);
+    text = memory.lastUserText(dir);
+    if (!text) { sendJSON(res, 400, { error: '没有可重生成的内容' }); return; }
+  } else if (editing) {
+    // 去掉最后一条用户消息及其后的 AI 回复，用编辑后的文本重发
+    if (!text) { sendJSON(res, 400, { error: '消息不能为空' }); return; }
+    memory.popUserAndAfter(dir);
+  } else if (!text) {
+    sendJSON(res, 400, { error: '消息不能为空' }); return;
+  }
+
   // ① 用户消息进完整本地存档（聊天框记录的来源；只是不发给 API，除非孟婆关闭）
-  memory.appendHistory(dir, '用户', text);
+  // （重生成模式不新增存档——用户消息本来就在）
+  if (!regenerate) memory.appendHistory(dir, '用户', text);
 
   const messages = buildMessages(meta, text);
   // 元灵：system prompt 末尾追加所有其它智能体的内容快照 + 写回协议
@@ -375,7 +389,7 @@ const server = http.createServer(async (req, res) => {
       req.pipe(busboy);
       return;
     }
-    const m = p.match(/^\/api\/agents\/([^/]+)(\/(history|params|memory-warden|behavior|flags|catchphrases|files|clear|text-fields|model))?$/);
+    const m = p.match(/^\/api\/agents\/([^/]+)(\/(history|params|memory-warden|behavior|flags|catchphrases|files|clear|text-fields|model|reset|fork))?$/);
     if (m) {
       const id = decodeURIComponent(m[1]);
       const action = m[3] || null;
@@ -482,6 +496,23 @@ const server = http.createServer(async (req, res) => {
       if (action === 'clear' && req.method === 'POST') {
         // 清空聊天记录（不删人设）
         memory.clearHistory(config.agentDir(id), meta);
+        sendJSON(res, 200, { ok: true });
+        return;
+      }
+      if (action === 'fork' && req.method === 'POST') {
+        // 复制/分支：完整拷贝人设与对话历史，得到独立的新智能体
+        // 命名：Rin → Rin.<:1（.<: 是象形的 fork 符号，读作 fork）；再分支持续递增
+        try {
+          const created = config.duplicateAgent(id);
+          sendJSON(res, 200, { ok: true, agent: created });
+        } catch (e) { sendJSON(res, 400, { error: e.message }); }
+        return;
+      }
+      if (action === 'reset' && req.method === 'POST') {
+        // 元灵重置：不能删除，但可以恢复出厂（清掉被写回/改坏的文件，按内置模板重建）
+        if (!meta.builtin || !metasoul.isMetasoul(meta)) { sendJSON(res, 403, { error: '只有元灵支持重置' }); return; }
+        fs.rmSync(config.agentDir(id), { recursive: true, force: true });
+        config.ensureMetasoul();
         sendJSON(res, 200, { ok: true });
         return;
       }

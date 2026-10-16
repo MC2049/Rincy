@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const metasoul = require('./metasoul');
+const memory = require('./memory');
 
 // 数据目录：可用 RINCY_DATA_DIR 指定（Android 启动器借此把数据放在私有 home 下，重置运行环境不丢）
 const DATA_DIR = process.env.RINCY_DATA_DIR
@@ -296,6 +297,36 @@ function updateAgent(id, patch) {
   return next;
 }
 
+// 复制/分支智能体：agents/<id>/ 整目录拷贝为新 id，名字加 .<:N（fork 象形符号，读作 fork）
+// 命名规则：剥掉已有 .<:N 后缀取基名，扫描同名基底的智能体取最大 N，新名字 = 基名 .<: (N+1)
+function duplicateAgent(id) {
+  const meta = readAgent(id);
+  if (!meta) throw new Error('智能体不存在');
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const base = `agent-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  let newId = base;
+  let n = 1;
+  while (fs.existsSync(path.join(AGENTS_DIR, newId))) newId = base + '-' + (++n);
+  // 基名：去掉尾部 .<:数字
+  const baseName = String(meta.name).replace(/\.<:\d+$/, '');
+  let maxN = 0;
+  for (const a of listAgents()) {
+    const m2 = String(a.name).match(/^(.*)\.<:(\d+)$/);
+    if (m2 && m2[1] === baseName) maxN = Math.max(maxN, parseInt(m2[2], 10));
+  }
+  const newName = baseName + '.<:' + (maxN + 1);
+  const srcDir = path.join(AGENTS_DIR, id);
+  const dstDir = path.join(AGENTS_DIR, newId);
+  fs.cpSync(srcDir, dstDir, { recursive: true });
+  const next = { ...meta, id: newId, name: newName, createdAt: new Date().toISOString() };
+  if (next.builtin) next.builtin = false; // 分身不是内置体：元灵的副本是普通智能体
+  fs.writeFileSync(path.join(dstDir, 'agent.json'), JSON.stringify(next, null, 2), 'utf8');
+  // 分层记忆按新智能体重建（历史完整保留，从同一个"记忆断点"继续）
+  memory.rebuildMemory(dstDir, next);
+  return next;
+}
+
 // 删除智能体：元灵（builtin）不允许删；其余连人设带记录整目录删除
 function deleteAgent(id) {
   const meta = readAgent(id);
@@ -525,7 +556,7 @@ module.exports = {
   PARAM_DEFS, clampParams, paramsBlock,
   createAgent, readAgent, updateAgent, listAgents, deleteAgent, agentDir, exportAgents, importAgents,
   renderSoul, renderAgentsMd, renderIdentity,
-  readSettings, writeSettings, addModel, updateModel, deleteModel, getAgentModel,
+  readSettings, writeSettings, addModel, updateModel, deleteModel, getAgentModel, duplicateAgent,
   DATA_DIR, AGENTS_DIR, ensureMetasoul: () => metasoul.ensureMetasoul(AGENTS_DIR, module.exports),
 };
 

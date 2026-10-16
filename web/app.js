@@ -294,6 +294,7 @@ function renderSwitches(agent) {
   $('#sel-speed').value = (agent.memory_warden && agent.memory_warden.speed) || 'standard';
   $('#sw-self-edit').checked = (agent.soul && agent.soul.self_edit) === true;
   $('#sw-history-visible').checked = (agent.history && agent.history.visible) !== false;
+  const rm = $('#btn-reset-metasoul'); if (rm) rm.hidden = !agent.builtin; // 只有元灵显示重置
 }
 
 function bindSwitches() {
@@ -845,6 +846,45 @@ function bindAddModelDialog() {
   $('#btn-am-save').addEventListener('click', () => saveNewModel().catch((e) => alert(e.message)));
 }
 
+// ---------- 重生成 / 改上一条（聊天操作行） ----------
+let editingLast = false;
+function lastUserBubbleText() {
+  const bubbles = $$('#chat-messages .bubble');
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    if (bubbles[i].classList.contains('me')) {
+      const tb = bubbles[i].querySelector('.text');
+      return tb ? tb.textContent : '';
+    }
+  }
+  return '';
+}
+function updateChatActions() {
+  const row = $('#chat-actions');
+  if (row) row.hidden = replying || $$('#chat-messages .bubble').length === 0;
+}
+function cancelEdit() {
+  editingLast = false;
+  const hint = $('#edit-hint');
+  if (hint) { hint.hidden = true; hint.innerHTML = ''; }
+}
+function bindChatActions() {
+  const regen = $('#btn-regen'), editBtn = $('#btn-edit-last');
+  if (regen) regen.addEventListener('click', () => { if (!replying) send({ regenerate: true }); });
+  if (editBtn) editBtn.addEventListener('click', () => {
+    if (replying) return;
+    const t = lastUserBubbleText();
+    if (!t) return;
+    editingLast = true;
+    $('#chat-input').value = t;
+    const hint = $('#edit-hint');
+    hint.hidden = false;
+    hint.innerHTML = t('chat.editing') + ' <a href="#" id="edit-cancel" style="color:inherit">\u2715 ' + t('common.cancel') + '</a>';
+    const c = $('#edit-cancel');
+    if (c) c.addEventListener('click', (e) => { e.preventDefault(); cancelEdit(); });
+    $('#chat-input').focus();
+  });
+}
+
 // ---------- 清除记忆（对当前选中的智能体生效，所有智能体都可用） ----------
 function bindClearMemory() {
   $('#btn-clear-memory').addEventListener('click', async () => {
@@ -880,6 +920,7 @@ async function loadHistory() {
     msgs.append(empty);
   }
   msgs.scrollTop = msgs.scrollHeight;
+  updateChatActions();
 }
 
 // 只有用户已在底部附近（距底 <50px）时才自动滚到底——往上翻不打断
@@ -960,18 +1001,34 @@ function addBubble(who, text) {
 let replying = false;
 let activeAbort = null;   // 当前请求的中止器：卡住时「停止」按钮靠它掐断
 let stopRequested = false; // 区分"用户主动停止"和"6 分钟兜底超时"
-async function send() {
+async function send(opts = {}) {
+  const regenerate = !!opts.regenerate;
+  const editing = !!opts.editing || editingLast; // 点过「改上一条」后，下次发送就是替换
+  if (!regenerate) cancelEdit();
   const input = $('#chat-input');
-  const text = input.value.trim();
-  if (!text) return;
+  let text = (opts.message !== undefined) ? String(opts.message) : input.value.trim();
+  if (regenerate) text = ''; // 正文由服务端从历史取
+  else if (!text) return;
   if (replying) {
     // 自愈：历史请求已无活跃 abort（曾被异常卡死）就强制复位，绝不让界面无声卡死
     if (!activeAbort) replying = false;
     else return; // 正常进行中：等停止或完成
   }
   if (!state.currentId) { alert(t('chat.no_agent')); return; }
-  input.value = '';
-  addBubble('me', text);
+  if (!regenerate) {
+    input.value = '';
+    // 编辑模式：先在 DOM 里移除被替换的上一组气泡（用户+AI），再放编辑后的消息
+    if (editing) {
+      const bubbles = $$('#chat-messages .bubble');
+      if (bubbles.length >= 2) { bubbles[bubbles.length - 1].remove(); bubbles[bubbles.length - 2].remove(); }
+      else if (bubbles.length === 1) bubbles[0].remove();
+    }
+    addBubble('me', text);
+  } else {
+    // 重生成：把最后一颗 AI 气泡从 DOM 里拿掉，新的回答原地长出来
+    const bubbles = $$('#chat-messages .bubble');
+    if (bubbles.length) bubbles[bubbles.length - 1].remove();
+  }
 
   replying = true;
   stopRequested = false;
@@ -1020,7 +1077,9 @@ async function send() {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentId: state.currentId, message: text }),
+      body: JSON.stringify(regenerate
+        ? { agentId: state.currentId, regenerate: true }
+        : { agentId: state.currentId, message: text, edit: editing }),
       signal: abort.signal,
     });
     if (!res.ok || !res.body) {
@@ -1093,6 +1152,7 @@ async function send() {
     activeAbort = null;
     if (sendBtn) sendBtn.textContent = t('chat.send');
     if (dot) dot.className = 'dot dot-ok';
+    updateChatActions();
   }
 }
 
@@ -1108,6 +1168,34 @@ function stopChat() {
     if (sendBtn) sendBtn.textContent = t('chat.send');
     if (dot) dot.className = 'dot dot-ok';
   }
+}
+
+// ---------- 分支智能体（duplicate/fork） ----------
+function bindForkAgent() {
+  const btn = $('#btn-fork-agent');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    if (!state.currentId) { alert(t('chat.no_agent')); return; }
+    const a = state.agents.find((x) => x.id === state.currentId);
+    if (!confirm(t('perm.fork_confirm', { name: a ? a.name : state.currentId }))) return;
+    const { agent } = await api(`/api/agents/${encodeURIComponent(state.currentId)}/fork`, { method: 'POST' });
+    toast(t('perm.fork_done', { name: agent.name }));
+    await refreshAgents();
+    await selectAgent(agent.id);
+  });
+}
+
+// ---------- 元灵重置（builtin 不能删，但可恢复出厂） ----------
+function bindResetMetasoul() {
+  const btn = $('#btn-reset-metasoul');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    if (!confirm(t('perm.reset_confirm'))) return;
+    await api('/api/agents/metasoul/reset', { method: 'POST' });
+    toast(t('perm.reset_done'));
+    await refreshAgents();
+    await selectAgent('metasoul');
+  });
 }
 
 // ---------- 新建智能体 ----------
@@ -1170,6 +1258,9 @@ async function init() {
   bindAgentModel();
   bindTextFields();
   bindClearMemory();
+  bindChatActions();
+  bindResetMetasoul();
+  bindForkAgent();
   bindSettingsDialog();
   bindAddModelDialog();
   bindLangAndCssTheme();

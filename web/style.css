@@ -443,3 +443,7 @@ dialog.wide-dialog { max-width: 480px; width: 92%; }
 
 /* 停止后的状态小字：跟在气泡正文后面，弱化显示 */
 .chat-stopped { display: inline-block; margin-left: 8px; color: var(--label-3, #999); font-size: .85em; }
+
+/* 聊天操作行：重生成 / 改上一条（有对话内容时才显示） */
+.chat-actions { display: flex; align-items: center; gap: 8px; padding: 0 10px 6px; }
+.chat-actions .edit-hint { color: var(--label-tertiary, #999); font-size: var(--font-small, 12px); }
