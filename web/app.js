@@ -872,10 +872,10 @@ function bindChatActions() {
   if (regen) regen.addEventListener('click', () => { if (!replying) send({ regenerate: true }); });
   if (editBtn) editBtn.addEventListener('click', () => {
     if (replying) return;
-    const t = lastUserBubbleText();
-    if (!t) return;
+    const lastText = lastUserBubbleText();
+    if (!lastText) return;
     editingLast = true;
-    $('#chat-input').value = t;
+    $('#chat-input').value = lastText;
     const hint = $('#edit-hint');
     hint.hidden = false;
     hint.innerHTML = t('chat.editing') + ' <a href="#" id="edit-cancel" style="color:inherit">\u2715 ' + t('common.cancel') + '</a>';
@@ -986,12 +986,12 @@ function addBubble(who, text) {
   if (hint) hint.remove();
   const div = document.createElement('div');
   div.className = 'bubble ' + (who === 'me' ? 'me' : 'ai');
-  const t = document.createElement('div');
-  t.className = 'text';
+  const tb = document.createElement('div');
+  tb.className = 'text';
   // 用户消息保持纯文本；AI 消息渲染 markdown（历史记录里 AI 内容也正确显示）
-  if (who === 'me') t.textContent = text;
-  else t.innerHTML = renderMarkdown(text) || '…';
-  div.append(t);
+  if (who === 'me') tb.textContent = text;
+  else tb.innerHTML = renderMarkdown(text) || '…';
+  div.append(tb);
   msgs.append(div);
   msgs.scrollTop = msgs.scrollHeight;
   return t;
@@ -1123,11 +1123,11 @@ async function send(opts = {}) {
       curLines = buf.split('\n');
       buf = curLines.pop() || '';
       for (const line of curLines) {
-        const t = line.trim();
-        if (!t) continue;
-        if (t.startsWith('event:')) { curEvent = t.slice(6).trim(); continue; }
-        if (!t.startsWith('data:')) continue;
-        const payload = t.slice(5).trim();
+        const ln = line.trim();
+        if (!ln) continue;
+        if (ln.startsWith('event:')) { curEvent = ln.slice(6).trim(); continue; }
+        if (!ln.startsWith('data:')) continue;
+        const payload = ln.slice(5).trim();
         if (!payload || payload === '[DONE]') continue;
         try { handleData(payload); } catch (e2) { /* 忽略解析不了的行 */ }
       }
