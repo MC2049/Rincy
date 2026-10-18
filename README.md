@@ -223,10 +223,10 @@ Rincy/
 
 已发布，从 [Releases](https://github.com/MC2049/Rincy/releases) 下载 APK 直接安装（启动器源码在 [Rincy-launcher](https://github.com/MC2049/Rincy-launcher)）。
 
-| 变体 | 体积 | 运行时 | 适合谁 |
+| 变体 | 体积 | 运行时 | 特点 |
 | --- | --- | --- | --- |
-| **full**（标准版） | ~130MB | Termux bootstrap，node 跑在独立进程 | 日常使用，后台稳定 |
-| **lite**（实验版） | ~26MB | libnode 进程内嵌入（Node 18），无 bootstrap | 追求小巧，能接受后台冻结时服务暂停 |
+| **full**（标准版） | ~130MB | Termux bootstrap，node 跑在独立进程 | **体积大但不容易出问题**（后台稳定），推荐 |
+| **lite**（实验版） | ~26MB | libnode 进程内嵌入（Node 18），无 bootstrap | **体积小但容易出问题**（node 与 App 同进程，后台冻结会暂停服务，刷新或重开可恢复） |
 
 两个变体包名不同（`.lite` 后缀），数据互相隔离，可并存安装。
 
