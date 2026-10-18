@@ -163,15 +163,23 @@ Rincy/
 
 │ └── app.js
 
-├── data/ # 用户数据（智能体、记忆）
+├── data/ # 用户数据（智能体、记忆；可用 RINCY_DATA_DIR 改位置）
+
+├── lang/ # 界面语言包（zh-CN / en-US）
+
+├── themes/ # 界面主题
 
 ├── scripts/
 
 │ ├── start.sh
 
-│ └── start.bat
+│ ├── start.bat
+
+│ └── build/ # 桌面启动器打包脚本
 
 ├── DESIGN_NOTES.md # 架构设计笔记
+
+├── RELEASING.md # 发布规则
 
 ├── README.md
 
@@ -183,13 +191,15 @@ Rincy/
 
 ## 数据存在哪里
 
-所有数据都在 `data/` 目录下：
+所有数据都在数据目录下（默认 `data/`，可用环境变量 `RINCY_DATA_DIR` 改位置）：
 
 ```
 
-data/agents/<智能体ID>/
+<数据目录>/agents/<智能体ID>/
 
-├── SOUL.md # 人设
+├── agent.json # 配置：模型绑定、参数、人设 soul_profile 等
+
+├── SOUL.md # 人设（由模板 + soul_profile 渲染生成）
 
 ├── AGENTS.md # 行为规则
 
@@ -207,23 +217,18 @@ data/agents/<智能体ID>/
 
 ---
 
-## Android 版计划
+## Android 版
 
-有 APK 计划，但**暂不发布**。
+已发布，从 [Releases](https://github.com/MC2049/Rincy/releases) 下载 APK 直接安装（启动器源码在 [Rincy-launcher](https://github.com/MC2049/Rincy-launcher)）。
 
-优先走两条路：
+| 变体 | 体积 | 运行时 | 适合谁 |
+| --- | --- | --- | --- |
+| **full**（标准版） | ~130MB | Termux bootstrap，node 跑在独立进程 | 日常使用，后台稳定 |
+| **lite**（实验版） | ~26MB | libnode 进程内嵌入（Node 18），无 bootstrap | 追求小巧，能接受后台冻结时服务暂停 |
 
-1. **源码 + 构建脚本**：用户在 Termux 里自己编译、自己签名、自己装
+两个变体包名不同（`.lite` 后缀），数据互相隔离，可并存安装。
 
-2. **Termux 脚本**：用户在 Termux 里装 Node，直接跑 Rincy
-
-**不注册 Google 开发者，不提交任何身份信息。**
-
-坚定支持 [Keep Android Open](https://keepandroidopen.org/) 运动。
-
-~~等 F-Droid 那边的情况明朗了，再评估是否正式发布 APK。~~
-
-安卓nodejs有点难，先不做，上面那句话请忽略，AI瞎说的
+**不注册 Google 开发者，不提交任何身份信息。** 坚定支持 [Keep Android Open](https://keepandroidopen.org/) 运动。
 
 ---
 
@@ -262,7 +267,7 @@ Rincy 只对自己 UI 层的内容负责：不预置违法角色、不内置违�
 
 本项目核心代码（src/、web/、lang/、themes/、scripts/）采用 MIT License。
 
-Android 启动器已拆分为独立仓库 [Rincy-Launcher](https://github.com/MC2049/Rincy-Launcher)：
+Android 启动器已拆分为独立仓库 [Rincy-launcher](https://github.com/MC2049/Rincy-launcher)：
 因为使用了 Termux（GPLv3）的代码和 bootstrap 包，启动器采用 GPLv3，详见其仓库内的 LICENSE。
 
 两部分独立分发，互不影响。
@@ -274,16 +279,17 @@ Android 启动器已拆分为独立仓库 [Rincy-Launcher](https://github.com/MC
 
 ---
 
-## 发布形态：启动器（Launcher）
+## 发布形态
 
-所有 release 都以**启动器**形式发布：包里只有源码 + 启动脚本，**不含 node_modules**。
+发布规则见 [RELEASING.md](RELEASING.md)：**本体与启动器版本各自独立，只发变了的那个。**
 
-| 平台 | 产物 | 用法 |
+| 形态 | 产物 | 说明 |
 | --- | --- | --- |
-| Linux / macOS | `rincy-launcher-v0.1.0-linux.tar.gz` | 解压后 `./start.sh` |
-| Windows | `rincy-launcher-v0.1.0-windows.zip` | 解压后双击 `start.bat`（或 `powershell -ExecutionPolicy Bypass -File start.ps1`） |
+| 本体（payload） | `rincy-payload-x.y.z.zip` | 源码包：src/ web/ lang/ themes/ + package.json。桌面端解压后 `node src/server.js`，Android 端由启动器解压到私有目录运行 |
+| Android 启动器 | `rincy-launcher-vX.Y.Z(-lite)-universal.apk` | [Rincy-launcher](https://github.com/MC2049/Rincy-launcher) 仓库，GPLv3 |
+| 桌面启动器包 | `scripts/build/` 产物 | Linux/macOS（`start.sh`）/ Windows（`start.bat`），源码 + 启动脚本，不含 node_modules |
 
-首次运行会自动安装两个依赖（`busboy`、`tar`，约 4MB，**需要联网一次**），之后可完全离线使用。
+桌面启动器首次运行会自动安装两个依赖（`busboy`、`tar`，约 4MB，**需要联网一次**），之后可完全离线使用。桌面/Android 均用 `RINCY_PORT` 改端口（桌面默认 3000，Android 启动器默认 4780）。
 
 打包（在仓库根目录执行）：
 
