@@ -25,5 +25,6 @@
 ## lite 变体备注
 
 - 包名 `com.rincy.launcher.lite`，libnode（nodejs-mobile v18.20.4）进程内嵌入，无 bootstrap
+- **体积小但容易出问题**：node 与 App 同进程，后台冻结会挂服务（full 体积大但不容易出问题）
 - 数据目录按包名隔离，与 full 可并存
 - 载荷兼容性以 Node 18 为底线验证
