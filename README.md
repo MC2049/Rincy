@@ -91,6 +91,8 @@ And Rin is not.
 
 ## 快速开始
 
+> 🐣 **完全不懂技术？** 请看图文教程 [quick-start.md](quick-start.md)——手把手教你装好并聊上第一句。
+
 ### 你需要什么
 
 - Node.js 18 或更高版本
