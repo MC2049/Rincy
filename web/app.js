@@ -195,6 +195,8 @@ function renderAgents() {
 
 async function deleteAgentItem(a) {
   if (!confirm(t('common.confirm_delete_agent', { name: a.name }))) return;
+  const rec = streams.get(a.id);
+  if (rec && !rec.finished) { rec.stopRequested = true; if (rec.abort) rec.abort.abort(); streams.delete(a.id); }
   await api('/api/agents/' + encodeURIComponent(a.id), { method: 'DELETE' });
   await refreshAgents();
   if (state.currentId === a.id) {
@@ -860,7 +862,7 @@ function lastUserBubbleText() {
 }
 function updateChatActions() {
   const row = $('#chat-actions');
-  if (row) row.hidden = replying || $$('#chat-messages .bubble').length === 0;
+  if (row) row.hidden = isReplying(state.currentId) || $$('#chat-messages .bubble').length === 0;
 }
 function cancelEdit() {
   editingLast = false;
@@ -869,9 +871,9 @@ function cancelEdit() {
 }
 function bindChatActions() {
   const regen = $('#btn-regen'), editBtn = $('#btn-edit-last');
-  if (regen) regen.addEventListener('click', () => { if (!replying) send({ regenerate: true }); });
+  if (regen) regen.addEventListener('click', () => { if (!isReplying(state.currentId)) send({ regenerate: true }); });
   if (editBtn) editBtn.addEventListener('click', () => {
-    if (replying) return;
+    if (isReplying(state.currentId)) return;
     const lastText = lastUserBubbleText();
     if (!lastText) return;
     editingLast = true;
@@ -899,8 +901,20 @@ function bindClearMemory() {
 }
 
 // ---------- 聊天记录（从完整本地存档渲染） ----------
+/** 按当前查看的智能体的流状态刷新发送按钮/圆点。 */
+function refreshChatUiState() {
+  const replyingNow = isReplying(state.currentId);
+  const sendBtn = $('#btn-send'), dot = $('#chat-dot');
+  if (sendBtn) sendBtn.textContent = t(replyingNow ? 'chat.stop' : 'chat.send');
+  if (dot) dot.className = replyingNow ? 'dot dot-run' : 'dot dot-ok';
+}
+
 async function loadHistory() {
   if (!state.currentId) return;
+  // 该智能体若正在流式回复，先把直播气泡从 DOM 摘下（渲染完历史再接回去，内容继续直播）
+  const rec = streams.get(state.currentId);
+  const liveBubble = (rec && !rec.finished && rec.aiBubble) ? rec.aiBubble.div : null;
+  if (liveBubble) liveBubble.remove();
   const { history } = await api(`/api/agents/${state.currentId}/history`).catch(() => ({ history: '' }));
   const msgs = $('#chat-messages');
   msgs.innerHTML = '';
@@ -913,13 +927,17 @@ async function loadHistory() {
   }
   if (cur) bubbles.push(cur);
   for (const b of bubbles) addBubble(b.who === '用户' ? 'me' : 'ai', b.text);
-  if (!msgs.children.length) {
+  if (liveBubble) {
+    // 直播气泡接回末尾（进行中的回复还没进磁盘历史，挂在最后正是它的位置）
+    msgs.append(liveBubble);
+  } else if (!msgs.children.length) {
     const empty = document.createElement('div');
     empty.className = 'empty-hint';
     empty.textContent = t('chat.empty');
     msgs.append(empty);
   }
   msgs.scrollTop = msgs.scrollHeight;
+  refreshChatUiState();
   updateChatActions();
 }
 
@@ -998,9 +1016,11 @@ function addBubble(who, text) {
 }
 
 // ---------- 聊天（流式） ----------
-let replying = false;
-let activeAbort = null;   // 当前请求的中止器：卡住时「停止」按钮靠它掐断
-let stopRequested = false; // 区分"用户主动停止"和"6 分钟兜底超时"
+// 并行聊天：每个智能体一条独立流，互不阻塞。key = agentId。
+// 记录 { abort, aiBubble, full, stopRequested, waitingTimer, finished }；
+// 切走时流式气泡从 DOM 摘下挂在记录里，切回来原样接上继续直播。
+const streams = new Map();
+const isReplying = (id) => { const s = streams.get(id); return !!(s && !s.finished); };
 async function send(opts = {}) {
   const regenerate = !!opts.regenerate;
   const editing = !!opts.editing || editingLast; // 点过「改上一条」后，下次发送就是替换
@@ -1009,10 +1029,12 @@ async function send(opts = {}) {
   let text = (opts.message !== undefined) ? String(opts.message) : input.value.trim();
   if (regenerate) text = ''; // 正文由服务端从历史取
   else if (!text) return;
-  if (replying) {
+  const agentId = state.currentId;
+  if (isReplying(agentId)) {
     // 自愈：历史请求已无活跃 abort（曾被异常卡死）就强制复位，绝不让界面无声卡死
-    if (!activeAbort) replying = false;
-    else return; // 正常进行中：等停止或完成
+    const rec = streams.get(agentId);
+    if (!rec.abort) streams.delete(agentId);
+    else return; // 这个智能体正在回复中：等停止或完成（不影响别的智能体）
   }
   if (!state.currentId) { alert(t('chat.no_agent')); return; }
   if (!regenerate) {
@@ -1030,18 +1052,18 @@ async function send(opts = {}) {
     if (bubbles.length) bubbles[bubbles.length - 1].remove();
   }
 
-  replying = true;
-  stopRequested = false;
+  const rec = { abort: null, aiBubble: null, full: '', stopRequested: false, waitingTimer: null, finished: false };
+  streams.set(agentId, rec);
   const sendBtn = $('#btn-send');
   const dot = $('#chat-dot');
   if (sendBtn) sendBtn.textContent = t('chat.stop'); // 进行中按钮变「停止」
   if (dot) dot.className = 'dot dot-run';
 
   // —— 从这里起全部纳入同一个 try/finally：任何一步抛错，
-  //    finally 都会复位 replying/按钮/圆点，界面永不被楔死 ——
+  //    finally 都会收尾记录/按钮/圆点，界面永不被楔死 ——
   const abort = new AbortController();
-  activeAbort = abort;
-  const hardStop = setTimeout(() => { stopRequested = true; abort.abort(); }, 6 * 60 * 1000);
+  rec.abort = abort;
+  const hardStop = setTimeout(() => { rec.stopRequested = true; abort.abort(); }, 6 * 60 * 1000);
   let waitingTimer = null;
   let aiBubble = null;
   try {
@@ -1063,11 +1085,12 @@ async function send(opts = {}) {
       msgs.append(div);
       const thText = th.querySelector('.thought-text');
       msgs.scrollTop = msgs.scrollHeight;
-      return { div, th, thText, t: tb };
+      rec.aiBubble = { div, th, thText, t: tb };
+      return rec.aiBubble;
     })();
     // 20 秒还没等到第一个字节就把状态说清楚（"思考中"→"模型还在想"）
     let gotAnything = false;
-    waitingTimer = setTimeout(() => {
+    rec.waitingTimer = waitingTimer = setTimeout(() => {
       if (!gotAnything && aiBubble) {
         aiBubble.thText.textContent = t('chat.waiting');
         $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
@@ -1100,9 +1123,10 @@ async function send(opts = {}) {
       if (curEvent === 'thought' && j.text) {
         aiBubble.th.hidden = false;
         aiBubble.thText.textContent += j.text;
-        stickToBottom();
+        if (state.currentId === agentId) stickToBottom();
       } else if (curEvent === 'delta' && j.text) {
-        full += j.text; aiBubble.t.innerHTML = renderMarkdown(full); stickToBottom();
+        full += j.text; rec.full = full; aiBubble.t.innerHTML = renderMarkdown(full);
+        if (state.currentId === agentId) stickToBottom();
       } else if (curEvent === 'metasoul' && (j.applied || j.errors)) {
         if (j.applied && j.applied.length) {
           toast(t('metasoul.toast', { n: j.applied.length }));
@@ -1135,7 +1159,7 @@ async function send(opts = {}) {
     if (!full && aiBubble.t.textContent === '…' && aiBubble.thText.textContent === '') aiBubble.t.textContent = t('chat.no_reply');
   } catch (e) {
     if (e && e.name === 'AbortError') {
-      if (stopRequested) {
+      if (rec.stopRequested) {
         if (aiBubble) aiBubble.t.innerHTML += '<span class="chat-stopped">' + t('chat.stopped') + '</span>';
       } else if (aiBubble) {
         aiBubble.t.textContent = t('chat.gave_up');
@@ -1147,27 +1171,23 @@ async function send(opts = {}) {
     }
   } finally {
     clearTimeout(hardStop);
-    if (waitingTimer) clearTimeout(waitingTimer);
-    replying = false;
-    activeAbort = null;
-    if (sendBtn) sendBtn.textContent = t('chat.send');
-    if (dot) dot.className = 'dot dot-ok';
+    if (rec.waitingTimer) clearTimeout(rec.waitingTimer);
+    rec.finished = true;
+    streams.delete(agentId);
+    refreshChatUiState(); // 只刷新当前查看的智能体的按钮/圆点（后台流不抢界面）
     updateChatActions();
   }
 }
 
 // 「停止」：掐断当前请求。气泡和已生成的部分内容都保留，输入框立即可再用
 function stopChat() {
-  stopRequested = true;
-  if (activeAbort) {
-    activeAbort.abort(); // 有真实请求：掐断它，气泡保留已生成内容
-  } else {
-    // 没有活跃请求（历史卡死）：直接复位，按钮立刻变回「发送」
-    replying = false;
-    const sendBtn = $('#btn-send'), dot = $('#chat-dot');
-    if (sendBtn) sendBtn.textContent = t('chat.send');
-    if (dot) dot.className = 'dot dot-ok';
+  const rec = streams.get(state.currentId);
+  if (rec && !rec.finished) {
+    rec.stopRequested = true;
+    if (rec.abort) rec.abort.abort(); // 掐断当前查看的智能体的流，气泡保留已生成内容
+    return;
   }
+  refreshChatUiState(); // 没有活跃流（历史卡死）：按钮立刻复位
 }
 
 // ---------- 分支智能体（duplicate/fork） ----------
@@ -1301,11 +1321,11 @@ async function init() {
 // —— 立即绑定（刻意在 init 之前生效）：数据没加载完、甚至服务无响应时，
 //    发送/停止也必须可点，界面永不"无声全死" ——
 $('#btn-send').addEventListener('click', () => {
-  if (replying) stopChat();
+  if (isReplying(state.currentId)) stopChat();
   else send();
 });
 $('#chat-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); if (!replying) send(); }
+  if (e.key === 'Enter') { e.preventDefault(); if (!isReplying(state.currentId)) send(); }
 });
 
 let initRetryTimer = null;
