@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>Rincy</title>
-<link rel="stylesheet" href="/style.css?v=1.2.3">
+<link rel="stylesheet" href="/style.css?v=1.3.0">
 </head>
 <body>
 <div class="app" id="app">
@@ -238,6 +238,7 @@
         <div class="fold-inner">
           <label class="switch-row"><input type="checkbox" id="sw-self-edit"> <span data-i18n="perm.self_edit">允许智能体修改自己的人设</span></label>
           <label class="switch-row"><input type="checkbox" id="sw-history-visible"> <span data-i18n="perm.history">允许查看历史存档</span></label>
+          <label class="switch-row"><input type="checkbox" id="sw-deep-think"> <span data-i18n="perm.deep_think">深度思考（显示并保留思考过程）</span></label>
           <button class="pill-btn ghost" id="btn-view-config" data-i18n="perm.view_files">查看原始配置文件</button>
           <button class="pill-btn ghost" id="btn-reset-metasoul" data-i18n="perm.reset_metasoul" hidden>重置元灵（恢复出厂）</button>
           <button class="pill-btn ghost" id="btn-fork-agent" data-i18n="perm.fork">⎇ 分支此智能体</button>
@@ -382,6 +383,6 @@ setTimeout(function () {
   if (miss.length) window.__bootErr('浏览器内核缺少能力：' + miss.join(', ') + '。WebView 版本过旧，请更新「系统 WebView」或系统。');
 }, 300);
 </script>
-<script src="/app.js?v=1.2.3"></script>
+<script src="/app.js?v=1.3.0"></script>
 </body>
 </html>

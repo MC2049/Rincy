@@ -30,10 +30,13 @@ function clip(s, n) {
 }
 
 // ① 完整本地存档：追加一条消息（人类可读的 Markdown，用户可直接打开看）
-function appendHistory(agentDir, who, text) {
+function appendHistory(agentDir, who, text, thought) {
   try {
     fs.mkdirSync(path.dirname(historyFile(agentDir)), { recursive: true });
-    fs.appendFileSync(historyFile(agentDir), `\n## [${now()}] ${who}\n\n${text}\n`, 'utf8');
+    let block = `\n## [${now()}] ${who}\n\n${text || ''}\n`;
+    // 深度思考的过程以 ```思考 围栏跟在本次回答后面，一并入档
+    if (thought) block += `\n\`\`\`思考\n${thought}\n\`\`\`\n`;
+    fs.appendFileSync(historyFile(agentDir), block, 'utf8');
   } catch (e) {
     console.error('[memory] 存档写入失败（不影响回复）：', e.message);
   }
@@ -50,14 +53,20 @@ function readHistory(agentDir) {
 // 从完整存档解析出 {ts, who, text} 数组（"## [时间] 谁" 为分隔）
 function parseHistory(md) {
   const out = [];
-  let cur = null;
+  let cur = null, inThought = false;
   for (const line of String(md).split('\n')) {
     const m = line.match(/^## \[([^\]]*)\] (.+)$/);
     if (m) {
       if (cur) out.push(cur);
-      cur = { ts: m[1], who: m[2].trim(), text: '' };
-    } else if (cur && line.trim()) {
-      cur.text += (cur.text ? '\n' : '') + line.trim();
+      cur = { ts: m[1], who: m[2].trim(), text: '', thought: '' };
+      inThought = false;
+    } else if (cur) {
+      const t = line.trim();
+      if (t === '```思考') { inThought = true; continue; }
+      if (inThought && t === '```') { inThought = false; continue; }
+      if (!t) continue;
+      if (inThought) cur.thought += (cur.thought ? '\n' : '') + t;
+      else cur.text += (cur.text ? '\n' : '') + t;
     }
   }
   if (cur) out.push(cur);
@@ -70,7 +79,8 @@ function writeHistory(agentDir, entries) {
     fs.mkdirSync(path.dirname(historyFile(agentDir)), { recursive: true });
     let md = '';
     for (const e of entries) {
-      md += `\n## [${e.ts}] ${e.who}\n\n${e.text}\n`;
+      md += `\n## [${e.ts}] ${e.who}\n\n${e.text || ''}\n`;
+      if (e.thought) md += `\n\`\`\`思考\n${e.thought}\n\`\`\`\n`;
     }
     fs.writeFileSync(historyFile(agentDir), md, 'utf8');
   } catch (e) {
@@ -138,7 +148,11 @@ function rebuildMemory(agentDir, meta) {
 
   lines.push('## 近期记忆');
   if (!recent.length) lines.push('（还没有对话）');
-  for (const e of recent) lines.push(`- [${e.ts}] ${e.who}：${e.text}`);
+  for (const e of recent) {
+    lines.push(`- [${e.ts}] ${e.who}：${e.text}`);
+    // 深度思考的摘要跟在对应回答后进记忆——模型记得自己当时是怎么想的
+    if (e.who !== '用户' && e.thought) lines.push(`  - 思考摘要：${clip(e.thought, 100)}`);
+  }
   lines.push('');
 
   lines.push('## 中期记忆（压缩摘要）');
@@ -179,4 +193,64 @@ function clearHistory(agentDir, meta) {
   rebuildMemory(agentDir, meta);
 }
 
-module.exports = { appendHistory, readHistory, parseHistory, writeHistory, lastUserText, popLastAI, popUserAndAfter, rebuildMemory, readMemory, clearHistory };
+// ---------- 回复分支（重生成的历史版本） ----------
+// history/variants.json：{ "ai-N": [ {t, text, thought}, ... ] }
+// ai-N = 存档里第 N 条 AI 回复（1 起数）；数组收齐这条回复的全部版本（含当前生效版），
+// 当前生效哪个由 chat.md 的内容精确匹配得出。
+function variantsFile(agentDir) { return path.join(agentDir, 'history', 'variants.json'); }
+function loadVariants(agentDir) {
+  try { return JSON.parse(fs.readFileSync(variantsFile(agentDir), 'utf8')); } catch { return {}; }
+}
+function saveVariants(agentDir, v) {
+  try {
+    fs.mkdirSync(path.join(agentDir, 'history'), { recursive: true });
+    fs.writeFileSync(variantsFile(agentDir), JSON.stringify(v, null, 2), 'utf8');
+  } catch (e) { console.error('[memory] 变体写入失败（不影响回复）：', e.message); }
+}
+// 把某条 AI 回复的当前内容登记进它的版本表（已存在同文本则跳过）
+function syncVariant(agentDir, n, entry) {
+  if (!(n >= 1) || !entry || entry.who === '用户') return;
+  const all = loadVariants(agentDir);
+  const key = String(n);
+  const list = Array.isArray(all[key]) ? all[key] : [];
+  if (!list.some((x) => x.text === entry.text)) list.push({ t: entry.ts, text: entry.text, thought: entry.thought || '' });
+  all[key] = list;
+  saveVariants(agentDir, all);
+}
+// 把第 n 条 AI 回复原地换成指定版本（文本 + 思考一起换）
+function replaceEntryByAIIndex(agentDir, n, v) {
+  const entries = parseHistory(readHistory(agentDir));
+  let seen = 0;
+  for (const e of entries) {
+    if (e.who === '用户') continue;
+    seen++;
+    if (seen === n) {
+      e.ts = v.t || e.ts;
+      e.text = v.text || '';
+      e.thought = v.thought || '';
+      writeHistory(agentDir, entries);
+      return true;
+    }
+  }
+  return false;
+}
+// 给前端的历史元数据：{ "n": { count, pos } }，pos 为当前生效版本下标（0 起）
+function variantMeta(agentDir) {
+  const entries = parseHistory(readHistory(agentDir));
+  const aiEntries = entries.filter((e) => e.who !== '用户');
+  const all = loadVariants(agentDir);
+  const out = {};
+  for (const key of Object.keys(all)) {
+    const n = Number(key);
+    if (!(n >= 1 && n <= aiEntries.length)) continue;   // 条目已被编辑/清空：丢弃
+    const list = all[key];
+    if (!Array.isArray(list) || list.length < 2) continue; // 只有一个版本谈不上切换
+    const cur = aiEntries[n - 1];
+    let pos = list.findIndex((x) => x.text === cur.text);
+    if (pos === -1) { list.push({ t: cur.ts, text: cur.text, thought: cur.thought || '' }); pos = list.length - 1; saveVariants(agentDir, all); }
+    out[key] = { count: list.length, pos };
+  }
+  return out;
+}
+
+module.exports = { appendHistory, readHistory, parseHistory, writeHistory, lastUserText, popLastAI, popUserAndAfter, rebuildMemory, readMemory, clearHistory, loadVariants, saveVariants, syncVariant, replaceEntryByAIIndex, variantMeta };

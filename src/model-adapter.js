@@ -17,7 +17,7 @@ function chatEndpoint(baseUrl) {
 }
 
 // 发起流式聊天。onDelta(text) 逐段回调正式回答；onThought(text) 回调思考过程（reasoning 模型）。返回完整回复文本。
-async function chatStream({ modelConf, messages, params, onDelta, onThought, signal }) {
+async function chatStream({ modelConf, messages, params, onDelta, onThought, signal, think = true }) {
   const mc = modelConf || {};
   const provider = mc.provider === 'local' ? 'local' : 'cloud';
   const baseUrl = String(mc.baseUrl || '').replace(/\/+$/, '');
@@ -31,6 +31,9 @@ async function chatStream({ modelConf, messages, params, onDelta, onThought, sig
     model,
     messages,
     stream: true,
+    // 深度思考开关：关掉时带上 enable_thinking=false（Qwen3/百炼等端点尊重此参数，
+    // 不识别的端点会忽略——那种模型思考起来照样收，只是不再展示/入档）
+    ...(think === false ? { enable_thinking: false } : {}),
     temperature: params.temperature,
     max_tokens: params.maxReplyTokens,
     top_p: params.top_p,
@@ -119,7 +122,10 @@ async function chatStream({ modelConf, messages, params, onDelta, onThought, sig
           const json = JSON.parse(payload);
           const delta = json.choices?.[0]?.delta || {};
           if (delta.content) { full += delta.content; onDelta(delta.content); }
-          if (delta.reasoning_content) { thought += delta.reasoning_content; if (onThought) onThought(delta.reasoning_content); }
+          if (delta.reasoning_content) {
+            thought += delta.reasoning_content;
+            if (onThought && think !== false) onThought(delta.reasoning_content); // 开关关着：不外发
+          }
         } catch { /* 忽略无法解析的行（心跳/注释） */ }
       }
     }

@@ -284,6 +284,7 @@ function updateAgent(id, patch) {
   if (patch.behavior) next.behavior = { ...meta.behavior, ...patch.behavior };
   if (patch.soul) next.soul = { ...meta.soul, ...patch.soul };
   if (patch.history) next.history = { ...meta.history, ...patch.history };
+  if (patch.thinking) next.thinking = { ...meta.thinking, ...patch.thinking };
   if (patch.catchphrases) next.catchphrases = patch.catchphrases.map((s) => String(s).trim()).filter(Boolean);
   if (patch.name) next.name = String(patch.name).trim();
   if (patch.description !== undefined) next.description = String(patch.description || '').trim();
@@ -372,10 +373,7 @@ function defaultSettings() {
   return {
     theme: { mode: 'preset', preset: 'default', accent: '', css_name: '' },
     language: 'zh-CN',
-    models: [
-      { id: 'model-cloud', name: '云端默认', provider: 'cloud', baseUrl: 'https://api.openai.com', apiKey: '', model: '' },
-      { id: 'model-local', name: '本地默认', provider: 'local', baseUrl: 'http://127.0.0.1:11434', apiKey: '', model: '' },
-    ],
+    models: [], // 不再预置占位模型：模型库从空白开始，用户自己加
   };
 }
 
@@ -386,8 +384,11 @@ function migrateSettings(raw) {
   if (!raw) return s;
   if (raw.theme && typeof raw.theme === 'object') s.theme = { ...s.theme, ...raw.theme };
   if (raw.language) s.language = String(raw.language);
+  // 内置占位模型（云端默认/本地默认）没填过任何东西就顺手清掉——它们只会碍事
+  const isPristinePlaceholder = (m) =>
+    (m.id === 'model-cloud' || m.id === 'model-local') && !m.apiKey && !m.model;
   if (Array.isArray(raw.models) && raw.models.length) {
-    s.models = raw.models.map((m) => ({
+    s.models = raw.models.filter((m) => !isPristinePlaceholder(m)).map((m) => ({
       id: m.id || 'model-' + Math.random().toString(36).slice(2, 8),
       name: m.name || (m.provider === 'local' ? '本地模型' : '云端模型'),
       provider: m.provider === 'local' ? 'local' : 'cloud',
@@ -400,7 +401,7 @@ function migrateSettings(raw) {
     const arr = [];
     if (raw.cloud) arr.push({ id: 'model-cloud', name: '云端模型', provider: 'cloud', baseUrl: raw.cloud.baseUrl, apiKey: raw.cloud.apiKey, model: raw.cloud.model });
     if (raw.local) arr.push({ id: 'model-local', name: '本地模型', provider: 'local', baseUrl: raw.local.baseUrl, apiKey: '', model: raw.local.model });
-    if (arr.length) s.models = arr;
+    if (arr.length) s.models = arr.filter((m) => !isPristinePlaceholder(m));
   }
   return s;
 }
@@ -503,6 +504,32 @@ function getAgentModel(meta) {
 }
 
 
+// ---------- 人设修改轨迹 ----------
+// 谁在什么时候改了 SOUL.md / AGENTS.md / IDENTITY.md，全部追加记录在
+// history/changes.md（改前/改后全文），可回溯可手工还原。
+const PERSONA_FILES = ['SOUL.md', 'AGENTS.md', 'IDENTITY.md'];
+function capturePersona(agentDir) {
+  const out = {};
+  for (const f of PERSONA_FILES) {
+    try { out[f] = fs.readFileSync(path.join(agentDir, f), 'utf8'); } catch { out[f] = ''; }
+  }
+  return out;
+}
+function logPersonaChanges(meta, before, after, actor) {
+  if (!meta || !meta.id) return;
+  const dir = agentDir(meta.id);
+  const touched = PERSONA_FILES.filter((f) => (before[f] || '') !== (after[f] || ''));
+  for (const f of touched) {
+    if (!before[f]) continue; // 首次渲染（创建/重置）不算修改
+    const o = before[f].split('\n').length, n2 = after[f].split('\n').length;
+    let entry = `\n## [${new Date().toLocaleString('sv-SE').replace('T', ' ')}] ${actor || '用户'} 修改了 ${f}（${o} 行 → ${n2} 行）\n\n### 改前\n\n${before[f]}\n\n### 改后\n\n${after[f]}\n\n---\n`;
+    try {
+      fs.mkdirSync(path.join(dir, 'history'), { recursive: true });
+      fs.appendFileSync(path.join(dir, 'history', 'changes.md'), entry, 'utf8');
+    } catch (e) { console.error('[config] 轨迹写入失败（不影响修改）：', e.message); }
+  }
+}
+
 // 导出所有智能体为 tar（不压缩）；返回 tar 的 Buffer
 async function exportAgents(agentId) {
   const tar = require('tar');
@@ -552,7 +579,7 @@ async function importAgents(tarBuffer) {
   }
 }
 
-module.exports = {
+module.exports = { capturePersona, logPersonaChanges, PERSONA_FILES,
   PARAM_DEFS, clampParams, paramsBlock,
   createAgent, readAgent, updateAgent, listAgents, deleteAgent, agentDir, exportAgents, importAgents,
   renderSoul, renderAgentsMd, renderIdentity,

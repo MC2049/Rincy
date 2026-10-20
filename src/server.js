@@ -108,6 +108,9 @@ async function handleChat(req, res) {
   const isSoul = metasoul.isMetasoul(meta);
 
   if (regenerate) {
+    // 重生成前：把当前这条回答登记进它的版本表（回复分支浏览的数据来源）
+    const before = memory.parseHistory(memory.readHistory(dir)).filter((e) => e.who !== '用户');
+    if (before.length) memory.syncVariant(dir, before.length, before[before.length - 1]);
     // 去掉末尾的 AI 回复，用最后一条用户消息重新生成（不新增用户消息）
     memory.popLastAI(dir);
     text = memory.lastUserText(dir);
@@ -174,29 +177,34 @@ async function handleChat(req, res) {
     return;
   }
 
-  let full = '';
+  // 深度思考开关（agent.json 的 thinking.enabled，默认开）
+  const thinkOn = !(meta.thinking && meta.thinking.enabled === false);
+  let full = '', thoughtText = '';
   try {
     full = await adapter.chatStream({
       modelConf,
       messages,
       params,
+      think: thinkOn,
       signal: upstreamAbort.signal,
       onDelta: (d) => send('delta', { text: d }),
-      onThought: (t) => send('thought', { text: t }),
+      onThought: (t) => { thoughtText += t; send('thought', { text: t }); },
     });
     // 元灵：回复里的 ```metasoul 写回块在此落盘；用户只看到块外的正文
     let applied = [];
     if (isSoul) {
       const parsed = metasoul.parseWrites(full);
-      const r = metasoul.applyOps(parsed.ops, config);
+      const r = metasoul.applyOps(parsed.ops, config, meta.name);
       applied = r.applied;
       if (r.errors.length) send('metasoul', { errors: r.errors });
       const cleaned = parsed.cleaned || metasoul.fallbackText(applied) || full;
       full = cleaned;
       if (applied.length) send('metasoul', { applied });
     }
-    // ② 回复完成后：AI 回复进完整存档
-    memory.appendHistory(dir, meta.name, full);
+    // ② 回复完成后：AI 回复（连同思考过程）进完整存档，并登记进版本表
+    memory.appendHistory(dir, meta.name, full, thoughtText);
+    const after = memory.parseHistory(memory.readHistory(dir)).filter((e) => e.who !== '用户');
+    if (after.length) memory.syncVariant(dir, after.length, after[after.length - 1]);
     send('done', { full, applied });
   } catch (e) {
     // 失败不吞消息：人话报错发到流里，聊天框照常显示
@@ -389,7 +397,7 @@ const server = http.createServer(async (req, res) => {
       req.pipe(busboy);
       return;
     }
-    const m = p.match(/^\/api\/agents\/([^/]+)(\/(history|params|memory-warden|behavior|flags|catchphrases|files|clear|text-fields|model|reset|fork))?$/);
+    const m = p.match(/^\/api\/agents\/([^/]+)(\/(history|params|memory-warden|behavior|flags|catchphrases|files|clear|text-fields|model|reset|fork|variant))?$/);
     if (m) {
       const id = decodeURIComponent(m[1]);
       const action = m[3] || null;
@@ -399,7 +407,7 @@ const server = http.createServer(async (req, res) => {
       if (action === 'history' && req.method === 'GET') {
         // 查看历史存档（界面"查看历史存档"入口；受 history.visible 控制）
         if (meta.history && meta.history.visible === false) { sendJSON(res, 403, { error: '这个智能体关闭了历史存档查看' }); return; }
-        sendJSON(res, 200, { history: memory.readHistory(config.agentDir(id)) });
+        sendJSON(res, 200, { history: memory.readHistory(config.agentDir(id)), variants: memory.variantMeta(config.agentDir(id)) });
         return;
       }
       if (action === 'params' && req.method === 'POST') {
@@ -431,6 +439,7 @@ const server = http.createServer(async (req, res) => {
         const patch = {};
         if (body && typeof body.self_edit === 'boolean') patch.soul = { self_edit: body.self_edit };
         if (body && typeof body.history_visible === 'boolean') patch.history = { visible: body.history_visible };
+        if (body && typeof body.deep_think === 'boolean') patch.thinking = { enabled: body.deep_think };
         sendJSON(res, 200, { ok: true, agent: config.updateAgent(id, patch) });
         return;
       }
@@ -445,7 +454,9 @@ const server = http.createServer(async (req, res) => {
           const i = list.indexOf(text);
           if (i >= 0) list.splice(i, 1);
         }
+        const beforeFiles = config.capturePersona(config.agentDir(id));
         const next = config.updateAgent(id, { catchphrases: list }); // 重渲染 SOUL.md
+        config.logPersonaChanges(next, beforeFiles, config.capturePersona(config.agentDir(id)), '用户');
         sendJSON(res, 200, { ok: true, agent: next });
         return;
       }
@@ -465,7 +476,9 @@ const server = http.createServer(async (req, res) => {
         const key = mapping[body?.field];
         if (!key) { sendJSON(res, 400, { error: '不认识的字段: ' + (body?.field || '') }); return; }
         const patch = { [key]: String(body?.value ?? '').trim() };
+        const beforeFiles = config.capturePersona(config.agentDir(id));
         const next = config.updateAgent(id, patch); // 重渲染 SOUL.md / AGENTS.md / IDENTITY.md
+        config.logPersonaChanges(next, beforeFiles, config.capturePersona(config.agentDir(id)), '用户');
         // 改名字要同时保证 IDENTITY 的 Name 也是新名字
         sendJSON(res, 200, { ok: true, agent: next });
         return;
@@ -490,7 +503,21 @@ const server = http.createServer(async (req, res) => {
           agents: read('AGENTS.md'),
           identity: read('IDENTITY.md'),
           memory: read('memory.md'),
+          changes: read('history/changes.md'),
         });
+        return;
+      }
+      if (action === 'variant' && req.method === 'POST') {
+        // 切换某条 AI 回复的历史版本（回复分支浏览）：原地替换存档条目并重建记忆
+        let body;
+        try { body = JSON.parse(await readBody(req)); } catch { sendJSON(res, 400, { error: '请求格式不对' }); return; }
+        const n = Number(body && body.n), idx = Number(body && body.idx);
+        const agentDir = config.agentDir(id);
+        const list = memory.loadVariants(agentDir)[String(n)];
+        if (!Array.isArray(list) || !(idx >= 0 && idx < list.length)) { sendJSON(res, 400, { error: '没有这个版本' }); return; }
+        if (!memory.replaceEntryByAIIndex(agentDir, n, list[idx])) { sendJSON(res, 400, { error: '这条回复已不存在' }); return; }
+        memory.rebuildMemory(agentDir, config.readAgent(id));
+        sendJSON(res, 200, { ok: true, entry: list[idx], variants: memory.variantMeta(agentDir) });
         return;
       }
       if (action === 'clear' && req.method === 'POST') {

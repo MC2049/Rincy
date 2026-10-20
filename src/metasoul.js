@@ -174,7 +174,7 @@ function parseWrites(full) {
 
 // 应用操作块 → { applied, errors }
 // write：agents/<id>/ 下的任意文件与配置；create：新建智能体（可带完整人设字段）
-function applyOps(ops, config) {
+function applyOps(ops, config, actor) {
   const applied = [];
   const errors = [];
   for (const w of ops || []) {
@@ -202,6 +202,9 @@ function applyOps(ops, config) {
       const target = config.readAgent(w.agent);
       if (!target) throw new Error('智能体不存在：' + w.agent);
       const dir = config.agentDir(w.agent);
+      // 人设三件套的写回要留轨迹（谁改的、改前改后全文）
+      const isPersona = config.PERSONA_FILES.map((f) => f.toLowerCase()).includes(rel.toLowerCase());
+      const personaBefore = isPersona ? config.capturePersona(dir) : null;
       const file = path.resolve(dir, rel);
       if (!file.startsWith(path.resolve(dir) + path.sep)) throw new Error('文件路径越界：' + w.file);
       if (rel.endsWith('.json')) {
@@ -215,6 +218,7 @@ function applyOps(ops, config) {
       }
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, w.content, 'utf8');
+      if (personaBefore) config.logPersonaChanges(target, personaBefore, config.capturePersona(dir), actor || '元灵');
       applied.push({ op: 'write', agent: w.agent, name: target.name, file: rel });
     } catch (e) {
       errors.push({

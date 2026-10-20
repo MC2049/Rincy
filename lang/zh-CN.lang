@@ -105,6 +105,10 @@ speech.style_ph = 喜欢用比喻、语速慢、句尾常带省略号…
 # ---- 权限 ----
 perm.self_edit = 允许智能体修改自己的人设
 perm.history = 允许查看历史存档
+perm.deep_think = 深度思考（显示并保留思考过程）
+files.changes_header = 人设修改轨迹
+chat.thought_label = 思考过程
+chat.variant_title = 这条回复的其他版本
 perm.view_files = 查看原始配置文件
 
 # ---- 系统 ----

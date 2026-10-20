@@ -296,6 +296,7 @@ function renderSwitches(agent) {
   $('#sel-speed').value = (agent.memory_warden && agent.memory_warden.speed) || 'standard';
   $('#sw-self-edit').checked = (agent.soul && agent.soul.self_edit) === true;
   $('#sw-history-visible').checked = (agent.history && agent.history.visible) !== false;
+  $('#sw-deep-think').checked = !(agent.thinking && agent.thinking.enabled === false);
   const rm = $('#btn-reset-metasoul'); if (rm) rm.hidden = !agent.builtin; // 只有元灵显示重置
 }
 
@@ -322,6 +323,18 @@ function bindSwitches() {
         body: JSON.stringify({ speed: $('#sel-speed').value }),
       });
       addHistory(t('common.just_now'), t('memory.speed_set', { word: t('memory.speed.' + $('#sel-speed').value) }));
+    } catch (e) { alert(e.message); }
+  });
+  $('#sw-deep-think').addEventListener('change', async () => {
+    if (!state.currentId) return;
+    try {
+      const { agent } = await api(`/api/agents/${state.currentId}/flags`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deep_think: $('#sw-deep-think').checked }),
+      });
+      state.agent = agent;
+      addHistory(t('common.just_now'), t($('#sw-deep-think').checked ? 'perm.deep_think' : 'perm.deep_think'));
     } catch (e) { alert(e.message); }
   });
   $('#sw-self-edit').addEventListener('change', async () => {
@@ -915,7 +928,7 @@ async function loadHistory() {
   const rec = streams.get(state.currentId);
   const liveBubble = (rec && !rec.finished && rec.aiBubble) ? rec.aiBubble.div : null;
   if (liveBubble) liveBubble.remove();
-  const { history } = await api(`/api/agents/${state.currentId}/history`).catch(() => ({ history: '' }));
+  const { history, variants } = await api(`/api/agents/${state.currentId}/history`).catch(() => ({ history: '', variants: {} }));
   const msgs = $('#chat-messages');
   msgs.innerHTML = '';
   let cur = null;
@@ -926,7 +939,13 @@ async function loadHistory() {
     else if (cur && line.trim()) cur.text += (cur.text ? '\n' : '') + line.trim();
   }
   if (cur) bubbles.push(cur);
-  for (const b of bubbles) addBubble(b.who === '用户' ? 'me' : 'ai', b.text);
+  let aiN = 0;
+  for (const b of bubbles) {
+    if (b.who === '用户') { addBubble('me', b.text); continue; }
+    aiN++;
+    const vm = variants && variants[String(aiN)];
+    addBubble('ai', b.text, { thought: b.thought, variants: vm, aiN });
+  }
   if (liveBubble) {
     // 直播气泡接回末尾（进行中的回复还没进磁盘历史，挂在最后正是它的位置）
     msgs.append(liveBubble);
@@ -998,18 +1017,56 @@ function renderMarkdown(src) {
   return out.join('\n');
 }
 
-function addBubble(who, text) {
+function addBubble(who, text, opts = {}) {
   const msgs = $('#chat-messages');
   const hint = msgs.querySelector('.empty-hint');
   if (hint) hint.remove();
   const div = document.createElement('div');
   div.className = 'bubble ' + (who === 'me' ? 'me' : 'ai');
+  // AI 历史气泡：思考过程以折叠块呈现（默认收起，点标签展开）
+  if (who !== 'me' && opts.thought) {
+    const th = document.createElement('div');
+    th.className = 'thought folded';
+    th.innerHTML = '<span class="thought-label">' + t('chat.thought_label') + '</span><span class="thought-caret">▾</span>';
+    const thText = document.createElement('span');
+    thText.className = 'thought-text';
+    thText.textContent = opts.thought;
+    th.append(thText);
+    th.addEventListener('click', () => th.classList.toggle('folded'));
+    div.append(th);
+  }
   const tb = document.createElement('div');
   tb.className = 'text';
   // 用户消息保持纯文本；AI 消息渲染 markdown（历史记录里 AI 内容也正确显示）
   if (who === 'me') tb.textContent = text;
   else tb.innerHTML = renderMarkdown(text) || '…';
   div.append(tb);
+  // 回复分支切换器：‹ 当前/共 N ›
+  if (who !== 'me' && opts.variants && opts.variants.count > 1) {
+    const nav = document.createElement('div');
+    nav.className = 'variant-nav';
+    nav.title = t('chat.variant_title');
+    const prev = document.createElement('button'); prev.textContent = '‹';
+    const label = document.createElement('span');
+    const next = document.createElement('button'); next.textContent = '›';
+    const paint = () => { label.textContent = (opts.variants.pos + 1) + '/' + opts.variants.count; };
+    paint();
+    const jump = async (dir) => {
+      const count = opts.variants.count;
+      const idx = (opts.variants.pos + dir + count) % count;
+      try {
+        await api('/api/agents/' + encodeURIComponent(state.currentId) + '/variant', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ n: opts.aiN, idx }),
+        });
+        await loadHistory();
+      } catch (e) { toast(e.message); }
+    };
+    prev.addEventListener('click', () => jump(-1));
+    next.addEventListener('click', () => jump(1));
+    nav.append(prev, label, next);
+    div.append(nav);
+  }
   msgs.append(div);
   msgs.scrollTop = msgs.scrollHeight;
   return t;
@@ -1077,7 +1134,8 @@ async function send(opts = {}) {
       const th = document.createElement('div');
       th.className = 'thought';
       th.hidden = false; // 一开始就可见："思考中…"是明确状态，不是无声等待
-      th.innerHTML = '<span class="thought-label">' + t('chat.thinking') + '</span> <span class="thought-text"></span>';
+      th.innerHTML = '<span class="thought-label">' + t('chat.thinking') + '</span> <span class="thought-caret">▾</span><span class="thought-text"></span>';
+      th.addEventListener('click', () => th.classList.toggle('folded')); // 思考区可折叠
       const tb = document.createElement('div');
       tb.className = 'text';
       tb.textContent = t('chat.thinking');
@@ -1123,7 +1181,7 @@ async function send(opts = {}) {
       if (curEvent === 'thought' && j.text) {
         aiBubble.th.hidden = false;
         aiBubble.thText.textContent += j.text;
-        if (state.currentId === agentId) stickToBottom();
+        if (state.currentId === agentId && !aiBubble.th.classList.contains('folded')) stickToBottom();
       } else if (curEvent === 'delta' && j.text) {
         full += j.text; rec.full = full; aiBubble.t.innerHTML = renderMarkdown(full);
         if (state.currentId === agentId) stickToBottom();
@@ -1136,6 +1194,7 @@ async function send(opts = {}) {
       } else if (curEvent === 'done' && typeof j.full === 'string') {
         aiBubble.t.innerHTML = renderMarkdown(j.full) || '…';
         if (j.applied && j.applied.length) refreshAgents();
+        if (regenerate) loadHistory(); // 重生成后重载：挂上 ‹ n/m › 版本切换器
       } else if (j.message) {
         aiBubble.t.textContent = j.message; // 人话报错，不吞消息
       }
@@ -1244,8 +1303,10 @@ async function refreshAgents() {
 // ---------- 查看原始配置文件 / 设定历史 ----------
 async function viewFiles() {
   if (!state.currentId) return;
-  const { soul, agents, memory } = await api(`/api/agents/${state.currentId}/files`);
-  $('#files-content').textContent = [soul, agents, memory].filter(Boolean).join('\n\n---\n\n') || t('common.files_empty');
+  const { soul, agents, memory, changes } = await api(`/api/agents/${state.currentId}/files`);
+  const parts = [soul, agents, memory];
+  if (changes) parts.push(t('files.changes_header') + '\n\n' + changes);
+  $('#files-content').textContent = parts.filter(Boolean).join('\n\n---\n\n') || t('common.files_empty');
   $('#files-dialog').showModal();
 }
 

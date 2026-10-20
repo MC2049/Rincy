@@ -105,6 +105,10 @@ speech.style_ph = Loves metaphors, slow pace, trailing ellipses…
 # ---- Permissions ----
 perm.self_edit = Let the agent edit its own persona
 perm.history = Allow viewing chat archive
+perm.deep_think = Deep thinking (show & keep reasoning)
+files.changes_header = Persona change log
+chat.thought_label = Reasoning
+chat.variant_title = Other versions of this reply
 perm.view_files = View raw config files
 
 # ---- System ----

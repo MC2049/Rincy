@@ -342,6 +342,28 @@ dialog textarea { resize: vertical; }
 .bubble.ai .thought .thought-label {
   color: var(--label-tertiary); opacity: .9;
 }
+/* 思考区可折叠：点标签行收起/展开 */
+.bubble.ai .thought { cursor: pointer; }
+.bubble.ai .thought .thought-caret {
+  display: inline-block; margin-left: 4px;
+  transition: transform .15s ease; opacity: .8;
+}
+.bubble.ai .thought.folded .thought-text { display: none; }
+.bubble.ai .thought.folded .thought-caret { transform: rotate(-90deg); }
+/* 回复分支切换器：AI 气泡底部 ‹ n/m › */
+.variant-nav {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 6px; padding-top: 4px;
+  border-top: 1px dashed var(--border-medium);
+  color: var(--label-tertiary); font-size: var(--font-small);
+}
+.variant-nav button {
+  background: none; border: 1px solid var(--border-medium);
+  border-radius: 999px; color: var(--label-tertiary);
+  min-width: 26px; height: 22px; line-height: 1;
+  cursor: pointer; font-size: var(--font-small);
+}
+.variant-nav button:hover { color: var(--label-primary); border-color: var(--label-tertiary); }
 
 /* ---------- AI 气泡内 markdown 渲染 ---------- */
 .bubble.ai .text { white-space: pre-wrap; word-break: break-word; }
