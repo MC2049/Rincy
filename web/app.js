@@ -1065,12 +1065,20 @@ async function loadHistory() {
   const { history, variants } = await api(`/api/agents/${state.currentId}/history`).catch(() => ({ history: '', variants: {} }));
   const msgs = $('#chat-messages');
   msgs.innerHTML = '';
-  let cur = null;
+  let cur = null, inThought = false;
   const bubbles = [];
   for (const line of String(history).split('\n')) {
     const m = line.match(/^## \[([^\]]*)\] (.+)$/);
-    if (m) { if (cur) bubbles.push(cur); cur = { who: m[2].trim(), text: '' }; }
-    else if (cur && line.trim()) cur.text += (cur.text ? '\n' : '') + line.trim();
+    if (m) { if (cur) bubbles.push(cur); cur = { who: m[2].trim(), text: '', thought: '' }; inThought = false; continue; }
+    if (!cur) continue;
+    // 存档里的思考过程包在 ```思考 围栏里——必须单独归入 thought，
+    // 否则刷新后思考内容会被当成正文拼到回答末尾（还渲染成代码框）
+    const t = line.trim();
+    if (t === '```思考') { inThought = true; continue; }
+    if (inThought && t === '```') { inThought = false; continue; }
+    if (!t) continue;
+    if (inThought) cur.thought += (cur.thought ? '\n' : '') + t;
+    else cur.text += (cur.text ? '\n' : '') + t;
   }
   if (cur) bubbles.push(cur);
   let aiN = 0;
