@@ -106,6 +106,49 @@ async function chatStream({ modelConf, messages, params, onDelta, onThought, sig
   let buffer = '';
   let full = '',
     thought = '';
+  // ----  思考标签剥离（流式状态机） ----
+  // 有的模型不走 delta.reasoning_content，而是把思考混在 content 里输出
+  // （…；enable_thinking 也压不住）。这里把标签内外的内容分开：
+  // 标签外 → 正式回答（onDelta / full）；标签内 → 思考（onThought / thought）。
+  // 标签可能被流式分片从中间截断，用 thinkCarry 保存疑似半截标签的尾巴。
+  const THINK_OPEN = '<andestat>', THINK_CLOSE = '</andestat>';
+  let thinkMode = false; // false=标签外（正式回答），true=标签内（思考）
+  let thinkCarry = '';
+  // buf 尾部最长有多少字符是 tag 的前缀（用于跨分片识别半截标签）
+  const partialTail = (buf, tag) => {
+    for (let n = Math.min(tag.length - 1, buf.length); n > 0; n--) {
+      if (buf.endsWith(tag.slice(0, n))) return n;
+    }
+    return 0;
+  };
+  const feedContent = (text) => {
+    let buf = thinkCarry + text;
+    thinkCarry = '';
+    let out = '', th = '';
+    while (buf) {
+      const tag = thinkMode ? THINK_CLOSE : THINK_OPEN;
+      const i = buf.indexOf(tag);
+      if (i === -1) {
+        const keep = partialTail(buf, tag);
+        if (keep > 0) {
+          if (thinkMode) th += buf.slice(0, buf.length - keep); else out += buf.slice(0, buf.length - keep);
+          thinkCarry = buf.slice(buf.length - keep);
+        } else {
+          if (thinkMode) th += buf; else out += buf;
+        }
+        buf = '';
+      } else {
+        if (thinkMode) th += buf.slice(0, i); else out += buf.slice(0, i);
+        buf = buf.slice(i + tag.length);
+        thinkMode = !thinkMode;
+      }
+    }
+    if (out) { full += out; onDelta(out); }
+    if (th) {
+      thought += th;
+      if (onThought && think !== false) onThought(th); // 开关关着：不外发
+    }
+  };
   try {
     for (;;) {
       const { done, value } = await reader.read();
@@ -121,7 +164,7 @@ async function chatStream({ modelConf, messages, params, onDelta, onThought, sig
         try {
           const json = JSON.parse(payload);
           const delta = json.choices?.[0]?.delta || {};
-          if (delta.content) { full += delta.content; onDelta(delta.content); }
+          if (delta.content) feedContent(delta.content);
           if (delta.reasoning_content) {
             thought += delta.reasoning_content;
             if (onThought && think !== false) onThought(delta.reasoning_content); // 开关关着：不外发
@@ -131,6 +174,12 @@ async function chatStream({ modelConf, messages, params, onDelta, onThought, sig
     }
   } finally {
     clearOverall();
+    // 收尾：半截标签没等到另一半的尾巴按当前模式归位，绝不让字符凭空消失
+    if (thinkCarry) {
+      if (thinkMode) { thought += thinkCarry; if (onThought && think !== false) onThought(thinkCarry); }
+      else { full += thinkCarry; onDelta(thinkCarry); }
+      thinkCarry = '';
+    }
   }
   // 思考吐了一堆但正式回答为空 → 很可能是"回答长度"太小被思考吃光
   if (!full && thought) {

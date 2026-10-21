@@ -85,7 +85,13 @@ function buildSystemPrompt(meta) {
 //     —— 记录照常全量发送，memory.md 也一起发
 function buildMessages(meta, text) {
   const dir = config.agentDir(meta.id);
-  const messages = [{ role: 'system', content: buildSystemPrompt(meta) }];
+  const messages = [{
+    role: 'system',
+    content: buildSystemPrompt(meta) +
+      // 思考规范：有的模型把内心戏当正文输出，用户会看到大段英文推演。
+      // 统一引导：思考进  标签（服务端会剥离并归入思考区），标签外才是正式回答。
+      '\n\n【输出格式】如果你需要内部思考、推演或斟酌措辞，把这些内容放在  标签内（系统会隐藏它们）；标签外的内容才是给用户看的正式回答。不要在标签外复述你的思考过程。',
+  }];
   if (!meta.memory_warden?.enabled) {
     for (const e of memory.parseHistory(memory.readHistory(dir))) {
       if (!e.text) continue;
