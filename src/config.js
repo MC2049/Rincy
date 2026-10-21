@@ -285,6 +285,7 @@ function updateAgent(id, patch) {
   if (patch.soul) next.soul = { ...meta.soul, ...patch.soul };
   if (patch.history) next.history = { ...meta.history, ...patch.history };
   if (patch.thinking) next.thinking = { ...meta.thinking, ...patch.thinking };
+  if (patch.websearch) next.websearch = { ...(meta.websearch || {}), ...patch.websearch };
   if (patch.catchphrases) next.catchphrases = patch.catchphrases.map((s) => String(s).trim()).filter(Boolean);
   if (patch.name) next.name = String(patch.name).trim();
   if (patch.description !== undefined) next.description = String(patch.description || '').trim();
@@ -369,21 +370,57 @@ function paramsBlock(params) {
 //   models: [ { id, name, provider:'cloud'|'local', baseUrl, apiKey, model } ]
 // 每个智能体用 agent.json 的 model_id 指向 models 里的某条。
 // ---------------------------------------------------------------
+function defaultSearch() {
+  return {
+    active: 'se-bing',
+    engines: [
+      { id: 'se-bing', name: '必应', url_template: 'https://www.bing.com/search?q=%s', parser: 'bing', ua: '' },
+      { id: 'se-baidu', name: '百度', url_template: 'https://www.baidu.com/s?wd=%s', parser: 'baidu', ua: '' },
+      { id: 'se-ddg', name: 'DuckDuckGo', url_template: 'https://html.duckduckgo.com/html/?q=%s', parser: 'duckduckgo', ua: '' },
+    ],
+  };
+}
+
+// 搜索引擎配置清洗：模板必须含 %s；parser 只认内置三种；active 必须存在
+function sanitizeSearch(raw) {
+  const d = defaultSearch();
+  if (!raw || typeof raw !== 'object') return d;
+  const clean = [];
+  for (const e of (Array.isArray(raw.engines) ? raw.engines : [])) {
+    if (!e || typeof e !== 'object') continue;
+    const tpl = String(e.url_template || '').trim();
+    if (!tpl.includes('%s')) continue;
+    clean.push({
+      id: String(e.id || 'se-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)).slice(0, 40),
+      name: (String(e.name || '').trim() || '搜索引擎').slice(0, 40),
+      url_template: tpl.slice(0, 500),
+      parser: ['bing', 'baidu', 'duckduckgo'].includes(e.parser) ? e.parser : 'bing',
+      ua: String(e.ua || '').trim().slice(0, 300),
+    });
+  }
+  if (!clean.length) return d;
+  let active = String(raw.active || '');
+  if (!clean.some((e) => e.id === active)) active = clean[0].id;
+  return { engines: clean.slice(0, 20), active };
+}
+
 function defaultSettings() {
   return {
     theme: { mode: 'preset', preset: 'default', accent: '', css_name: '' },
     language: 'zh-CN',
     models: [], // 不再预置占位模型：模型库从空白开始，用户自己加
+    search: defaultSearch(), // 联网搜索的引擎库（预置必应/百度/DuckDuckGo，可增删改）
   };
 }
 
 // 旧版本是 { mode, cloud, local }，读到就迁成模型库
 function migrateSettings(raw) {
   const d = defaultSettings();
-  const s = { theme: d.theme, language: d.language, models: [...d.models] };
+  const s = { theme: d.theme, language: d.language, models: [...d.models], search: d.search };
   if (!raw) return s;
   if (raw.theme && typeof raw.theme === 'object') s.theme = { ...s.theme, ...raw.theme };
   if (raw.language) s.language = String(raw.language);
+  if (raw.search && typeof raw.search === 'object') s.search = sanitizeSearch(raw.search);
   // 内置占位模型（云端默认/本地默认）没填过任何东西就顺手清掉——它们只会碍事
   const isPristinePlaceholder = (m) =>
     (m.id === 'model-cloud' || m.id === 'model-local') && !m.apiKey && !m.model;
@@ -434,10 +471,11 @@ function writeSettings(patch) {
       try { fs.copyFileSync(BACKUP_SETTINGS_FILE, SETTINGS_FILE); } catch { /* 尽力而为 */ }
     }
   } catch { /* 备份失败不阻塞主流程 */ }
-  const next = { theme: cur.theme, language: cur.language, models: cur.models };
+  const next = { theme: cur.theme, language: cur.language, models: cur.models, search: cur.search };
   if (patch && patch.theme) next.theme = { ...cur.theme, ...patch.theme };
   if (patch && patch.language) next.language = String(patch.language);
   if (Array.isArray(patch?.models)) next.models = patch.models;
+  if (patch && patch.search) next.search = sanitizeSearch({ ...(cur.search || {}), ...patch.search });
   fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2), 'utf8');
   // 兜底的兜底：写完发现还没有可用备份（首次配置就丢过文件的情况），镜像一份

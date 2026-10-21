@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>Rincy</title>
-<link rel="stylesheet" href="/style.css?v=1.3.1">
+<link rel="stylesheet" href="/style.css?v=1.4.0">
 </head>
 <body>
 <div class="app" id="app">
@@ -239,6 +239,7 @@
           <label class="switch-row"><input type="checkbox" id="sw-self-edit"> <span data-i18n="perm.self_edit">允许智能体修改自己的人设</span></label>
           <label class="switch-row"><input type="checkbox" id="sw-history-visible"> <span data-i18n="perm.history">允许查看历史存档</span></label>
           <label class="switch-row"><input type="checkbox" id="sw-deep-think"> <span data-i18n="perm.deep_think">深度思考（显示并保留思考过程）</span></label>
+          <label class="switch-row"><input type="checkbox" id="sw-web-search"> <span data-i18n="perm.web_search">联网搜索（可搜索、可打开网页）</span></label>
           <button class="pill-btn ghost" id="btn-view-config" data-i18n="perm.view_files">查看原始配置文件</button>
           <button class="pill-btn ghost" id="btn-reset-metasoul" data-i18n="perm.reset_metasoul" hidden>重置元灵（恢复出厂）</button>
           <button class="pill-btn ghost" id="btn-fork-agent" data-i18n="perm.fork">⎇ 分支此智能体</button>
@@ -334,6 +335,12 @@
       <button class="pill-btn small" id="btn-export-agents" data-i18n="settings.export_agents">导出智能体</button>
       <button class="pill-btn small ghost" id="btn-import-agents" data-i18n="settings.import_agents">导入智能体</button>
     </div>
+  </div>
+  <div class="sett-section">
+    <div class="sett-title" data-i18n="settings.search_header">搜索引擎（联网搜索用哪个）</div>
+    <div id="engine-list"></div>
+    <button class="pill-btn" id="btn-add-engine" data-i18n="settings.add_engine">＋ 添加搜索引擎</button>
+  </div>
     <input type="file" id="import-agents-file" accept=".tar" style="display:none;">
   </div>
   <div class="dialog-btns">
@@ -361,6 +368,21 @@
   </div>
 </dialog>
 
+<dialog id="add-engine-dialog">
+  <h3 id="ae-title" data-i18n="enginedlg.add">添加搜索引擎</h3>
+  <input class="catch-input" id="ae-name" placeholder="名称（如：必应）" data-i18n-ph="enginedlg.name_ph">
+  <input class="catch-input" id="ae-url" placeholder="搜索地址（%s = 查询词）" data-i18n-ph="enginedlg.url_ph">
+  <select class="catch-input" id="ae-parser">
+    <option value="bing" data-i18n="enginedlg.parser_bing">解析方式：必应结果页</option>
+    <option value="baidu" data-i18n="enginedlg.parser_baidu">解析方式：百度结果页</option>
+    <option value="duckduckgo" data-i18n="enginedlg.parser_ddg">解析方式：DuckDuckGo</option>
+  </select>
+  <input class="catch-input" id="ae-ua" placeholder="浏览器 UA（留空用内置默认）" data-i18n-ph="enginedlg.ua_ph">
+  <div class="dialog-btns">
+    <button class="pill-btn small" id="btn-ae-save" data-i18n="common.save">保存</button>
+    <button class="pill-btn small ghost" onclick="this.closest('dialog').close()" data-i18n="common.cancel">取消</button>
+  </div>
+</dialog>
 <script>
 // 启动兜底（刻意用最老语法）：脚本失败直接给出可见原因，绝不无声无息
 window.__bootErr = function (msg) {
@@ -383,6 +405,6 @@ setTimeout(function () {
   if (miss.length) window.__bootErr('浏览器内核缺少能力：' + miss.join(', ') + '。WebView 版本过旧，请更新「系统 WebView」或系统。');
 }, 300);
 </script>
-<script src="/app.js?v=1.3.1"></script>
+<script src="/app.js?v=1.4.0"></script>
 </body>
 </html>

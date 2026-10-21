@@ -214,3 +214,19 @@ perm.reset_done = Yuangling reset
 perm.fork = ⎇ Fork this agent
 perm.fork_confirm = Fork "{name}"? Copies its persona and full chat history into an independent new agent (named like {name}.<:1, read as "fork 1").
 perm.fork_done = Fork created: {name}
+perm.web_search = Web access (search + open pages)
+settings.search_header = Search engine (used by web search)
+settings.add_engine = + Add search engine
+engine.empty = No search engine yet
+engine.set_active = Tap to make current
+engine.last_one = Keep at least one search engine
+enginedlg.add = Add search engine
+enginedlg.edit = Edit search engine
+enginedlg.name_ph = Name (e.g. Bing)
+enginedlg.url_ph = Search URL (%s = query)
+enginedlg.parser_bing = Parser: Bing results
+enginedlg.parser_baidu = Parser: Baidu results
+enginedlg.parser_ddg = Parser: DuckDuckGo
+enginedlg.ua_ph = Browser UA (blank = built-in default)
+enginedlg.need_url = The search URL must contain %s
+common.confirm_delete_engine = Delete this search engine?

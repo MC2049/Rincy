@@ -13,6 +13,7 @@ const memory = require('./memory');
 const adapter = require('./model-adapter');
 const i18n = require('./i18n');
 const metasoul = require('./metasoul');
+const websearch = require('./websearch');
 
 const PORT = Number(process.env.RINCY_PORT || 3000);
 const WEB_DIR = path.join(__dirname, '..', 'web');
@@ -179,27 +180,86 @@ async function handleChat(req, res) {
 
   // 深度思考开关（agent.json 的 thinking.enabled，默认开）
   const thinkOn = !(meta.thinking && meta.thinking.enabled === false);
+  // 联网搜索开关（agent.json 的 websearch.enabled，默认关）+ 当前启用的搜索引擎
+  const webOn = !!(meta.websearch && meta.websearch.enabled === true);
+  const searchEngine = webOn ? websearch.activeEngine(config.readSettings()) : null;
+  const MAX_SEARCH_ROUNDS = 2; // 一次回答最多搜两轮，防失控
+
   let full = '', thoughtText = '';
+  let applied = []; // 元灵写回结果（循环外声明：done 事件要用）
+  const extraMsgs = []; // 搜索轮的回填消息（assistant 原文 + user 搜索结果），逐轮累积
+  // 联网过程记录：既推给前端思考区，也累积进思考围栏（chat.md 存档）
+  const note = (s) => { thoughtText += s; send('thought', { text: s }); };
   try {
-    full = await adapter.chatStream({
-      modelConf,
-      messages,
-      params,
-      think: thinkOn,
-      signal: upstreamAbort.signal,
-      onDelta: (d) => send('delta', { text: d }),
-      onThought: (t) => { thoughtText += t; send('thought', { text: t }); },
-    });
-    // 元灵：回复里的 ```metasoul 写回块在此落盘；用户只看到块外的正文
-    let applied = [];
-    if (isSoul) {
-      const parsed = metasoul.parseWrites(full);
-      const r = metasoul.applyOps(parsed.ops, config, meta.name);
-      applied = r.applied;
-      if (r.errors.length) send('metasoul', { errors: r.errors });
-      const cleaned = parsed.cleaned || metasoul.fallbackText(applied) || full;
-      full = cleaned;
-      if (applied.length) send('metasoul', { applied });
+    while (true) {
+      const roundMessages = messages.slice();
+      if (searchEngine) {
+        roundMessages[0] = { ...roundMessages[0], content: roundMessages[0].content + '\n\n' + websearch.protocolBlock() };
+      }
+      roundMessages.push(...extraMsgs);
+
+      let roundFull = '';
+      roundFull = await adapter.chatStream({
+        modelConf,
+        messages: roundMessages,
+        params,
+        think: thinkOn,
+        signal: upstreamAbort.signal,
+        onDelta: (d) => send('delta', { text: d }),
+        onThought: (t) => { thoughtText += t; send('thought', { text: t }); },
+      });
+
+      // 元灵：回复里的 ```metasoul 写回块在此落盘；用户只看到块外的正文（每轮都处理）
+      applied = [];
+      if (isSoul) {
+        const parsed = metasoul.parseWrites(roundFull);
+        const r = metasoul.applyOps(parsed.ops, config, meta.name);
+        applied = r.applied;
+        if (r.errors.length) send('metasoul', { errors: r.errors });
+        roundFull = parsed.cleaned || metasoul.fallbackText(applied) || roundFull;
+        if (applied.length) send('metasoul', { applied });
+      }
+
+      // 联网：模型输出 ```search 块（查引擎）或 ```open 块（抓网页）→ 执行 → 结果回填 → 再生成一轮
+      const wantsSearch = searchEngine ? websearch.extractQueries(roundFull) : [];
+      const wantsOpen = webOn ? websearch.extractUrls(roundFull) : [];
+      if ((wantsSearch.length || wantsOpen.length) && extraMsgs.length / 2 < MAX_SEARCH_ROUNDS) {
+        const found = [], fails = [];
+        for (const q of wantsSearch) {
+          note('\n🔎 ' + q + ' …');
+          try {
+            const results = await websearch.search(q, searchEngine, { signal: upstreamAbort.signal });
+            found.push(websearch.formatResults(q, results));
+            note('（' + results.length + ' 条结果）');
+          } catch (e) {
+            fails.push('搜索「' + q + '」：' + e.message);
+            note('（搜索失败：' + e.message + '）');
+          }
+        }
+        for (const u of wantsOpen) {
+          note('\n🌐 ' + u + ' …');
+          try {
+            const page = await websearch.openUrl(u, { signal: upstreamAbort.signal });
+            found.push(websearch.formatPage(page));
+            note('（' + page.text.length + ' 字）');
+          } catch (e) {
+            fails.push('打开 ' + u + '：' + e.message);
+            note('（打开失败：' + e.message + '）');
+          }
+        }
+        extraMsgs.push({ role: 'assistant', content: roundFull });
+        extraMsgs.push({
+          role: 'user',
+          content: found.length
+            ? found.join('\n\n') + '\n\n（以上是刚查到的实时内容。请基于它们正式回答用户最初的问题，引用事实时附来源链接；不要再输出 search/open 块。）'
+            : '（联网没有成功：' + fails.join('；') + '。请直接根据你已有的知识正式回答，不要再输出 search/open 块。）',
+        });
+        continue; // 带着结果再生成一轮
+      }
+
+      // 收尾轮：剥掉可能残留的 search 块，只留正文
+      full = searchEngine ? websearch.stripBlocks(roundFull) : roundFull;
+      break;
     }
     // ② 回复完成后：AI 回复（连同思考过程）进完整存档，并登记进版本表
     memory.appendHistory(dir, meta.name, full, thoughtText);
@@ -440,6 +500,7 @@ const server = http.createServer(async (req, res) => {
         if (body && typeof body.self_edit === 'boolean') patch.soul = { self_edit: body.self_edit };
         if (body && typeof body.history_visible === 'boolean') patch.history = { visible: body.history_visible };
         if (body && typeof body.deep_think === 'boolean') patch.thinking = { enabled: body.deep_think };
+        if (body && typeof body.web_search === 'boolean') patch.websearch = { enabled: body.web_search };
         sendJSON(res, 200, { ok: true, agent: config.updateAgent(id, patch) });
         return;
       }

@@ -297,6 +297,7 @@ function renderSwitches(agent) {
   $('#sw-self-edit').checked = (agent.soul && agent.soul.self_edit) === true;
   $('#sw-history-visible').checked = (agent.history && agent.history.visible) !== false;
   $('#sw-deep-think').checked = !(agent.thinking && agent.thinking.enabled === false);
+  $('#sw-web-search').checked = !!(agent.websearch && agent.websearch.enabled === true);
   const rm = $('#btn-reset-metasoul'); if (rm) rm.hidden = !agent.builtin; // 只有元灵显示重置
 }
 
@@ -323,6 +324,18 @@ function bindSwitches() {
         body: JSON.stringify({ speed: $('#sel-speed').value }),
       });
       addHistory(t('common.just_now'), t('memory.speed_set', { word: t('memory.speed.' + $('#sel-speed').value) }));
+    } catch (e) { alert(e.message); }
+  });
+  $('#sw-web-search').addEventListener('change', async () => {
+    if (!state.currentId) return;
+    try {
+      const { agent } = await api(`/api/agents/${state.currentId}/flags`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ web_search: $('#sw-web-search').checked }),
+      });
+      state.agent = agent;
+      addHistory(t('common.just_now'), t('perm.web_search'));
     } catch (e) { alert(e.message); }
   });
   $('#sw-deep-think').addEventListener('change', async () => {
@@ -675,6 +688,126 @@ function saveTheme(patch) {
   }).catch((e) => alert(e.message));
 }
 
+// ---------- 搜索引擎库（全局设置；联网搜索用哪个引擎在这里管） ----------
+let aeEditId = null; // null = 添加模式；非 null = 正在编辑的引擎 id
+
+function searchConfig() {
+  return (state.settings && state.settings.search) || { engines: [], active: '' };
+}
+
+async function postSearch(next) {
+  const { settings } = await api('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ search: next }),
+  });
+  state.settings = settings;
+  renderEngineList();
+}
+
+function renderEngineList() {
+  const box = $('#engine-list');
+  box.innerHTML = '';
+  const { engines, active } = searchConfig();
+  if (!engines.length) {
+    const empty = document.createElement('div');
+    empty.className = 'model-empty';
+    empty.textContent = t('engine.empty');
+    box.append(empty);
+    return;
+  }
+  for (const e of engines) {
+    const row = document.createElement('div');
+    row.className = 'model-item' + (e.id === active ? ' current' : '');
+    row.style.cursor = 'pointer';
+    row.title = t('engine.set_active');
+    const info = document.createElement('div');
+    info.className = 'model-info';
+    const nm = document.createElement('div');
+    nm.className = 'model-name';
+    nm.textContent = (e.id === active ? '✓ ' : '') + (e.name || t('system.unnamed'));
+    const sub = document.createElement('div');
+    sub.className = 'model-sub';
+    sub.textContent = e.url_template || '';
+    info.append(nm, sub);
+    const edit = document.createElement('button');
+    edit.className = 'icon-btn';
+    edit.style.marginLeft = 'auto';
+    edit.textContent = '✎';
+    edit.title = t('common.edit');
+    edit.addEventListener('click', (ev) => { ev.stopPropagation(); openEditEngineDialog(e); });
+    const del = document.createElement('button');
+    del.className = 'icon-btn';
+    del.textContent = '×';
+    del.title = t('common.delete');
+    del.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      if (!confirm(t('common.confirm_delete_engine'))) return;
+      const cfg = searchConfig();
+      const engines2 = cfg.engines.filter((x) => x.id !== e.id);
+      if (!engines2.length) { alert(t('engine.last_one')); return; }
+      const active2 = cfg.active === e.id ? engines2[0].id : cfg.active;
+      try { await postSearch({ engines: engines2, active: active2 }); } catch (err) { alert(err.message); }
+    });
+    row.addEventListener('click', async () => {
+      if (e.id === searchConfig().active) return;
+      const cfg = searchConfig();
+      try { await postSearch({ engines: cfg.engines, active: e.id }); } catch (err) { alert(err.message); }
+    });
+    row.append(info, edit, del);
+    box.append(row);
+  }
+}
+
+function fillEngineForm(e) {
+  $('#ae-name').value = e.name || '';
+  $('#ae-url').value = e.url_template || '';
+  $('#ae-parser').value = e.parser || 'bing';
+  $('#ae-ua').value = e.ua || '';
+}
+
+function openEditEngineDialog(e) {
+  aeEditId = e.id;
+  $('#ae-title').textContent = t('enginedlg.edit');
+  fillEngineForm(e);
+  $('#add-engine-dialog').showModal();
+}
+
+async function saveEngine() {
+  const name = $('#ae-name').value.trim();
+  const url_template = $('#ae-url').value.trim();
+  const parser = $('#ae-parser').value;
+  const ua = $('#ae-ua').value.trim();
+  if (!url_template.includes('%s')) { alert(t('enginedlg.need_url')); return; }
+  const cfg = searchConfig();
+  const engines = [...(cfg.engines || [])];
+  if (aeEditId) {
+    const i = engines.findIndex((x) => x.id === aeEditId);
+    if (i >= 0) engines[i] = { ...engines[i], name: name || engines[i].name, url_template, parser, ua };
+  } else {
+    const id = 'se-' + Date.now().toString(36);
+    engines.push({ id, name: name || '搜索引擎', url_template, parser, ua });
+    const active = cfg.active || id;
+    await postSearch({ engines, active });
+    aeEditId = null;
+    $('#add-engine-dialog').close();
+    return;
+  }
+  await postSearch({ engines, active: cfg.active });
+  aeEditId = null;
+  $('#add-engine-dialog').close();
+}
+
+function bindEngineDialog() {
+  $('#btn-add-engine').addEventListener('click', () => {
+    aeEditId = null;
+    $('#ae-title').textContent = t('enginedlg.add');
+    fillEngineForm({ name: '', url_template: 'https://www.bing.com/search?q=%s', parser: 'bing', ua: '' });
+    $('#add-engine-dialog').showModal();
+  });
+  $('#btn-ae-save').addEventListener('click', () => saveEngine().catch((e) => alert(e.message)));
+}
+
 function renderModelList() {
   const box = $('#model-list');
   box.innerHTML = '';
@@ -782,6 +915,7 @@ async function loadSettings() {
 
 function openSettingsDialog() {
   renderSettingsDialog();
+  renderEngineList();
   $('#settings-dialog').showModal();
 }
 
@@ -1344,6 +1478,7 @@ async function init() {
   bindForkAgent();
   bindSettingsDialog();
   bindAddModelDialog();
+  bindEngineDialog();
   bindLangAndCssTheme();
   applyTheme((state.settings && state.settings.theme));
   await applyCssTheme(((state.settings && state.settings.theme && state.settings.theme.css_name) || ''));
