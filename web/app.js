@@ -1142,6 +1142,20 @@ function renderMarkdown(src) {
     if (h) { out.push(`<h${h[1].length}>${inlineMd(h[2])}</h${h[1].length}>`); continue; }
     const bq = ln.match(/^&gt;\s?(.*)$/);
     if (bq) { out.push('<blockquote>' + inlineMd(bq[1]) + '</blockquote>'); continue; }
+    // 表格：当前行含 | 且下一行是 |---|---| 分隔行
+    if (ln.includes('|') && i + 1 < lines.length && /^\s*\|?\s*:?-{2,}[-\s:|]*\|/.test(lines[i + 1])) {
+      const cells = (l) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+      const head = cells(ln);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].includes('|') && lines[i].trim()) { rows.push(lines[i]); i++; }
+      out.push('<table><thead><tr>' + head.map((h) => '<th>' + inlineMd(h) + '</th>').join('') + '</tr></thead><tbody>'
+        + rows.map((r) => '<tr>' + cells(r).map((c) => '<td>' + inlineMd(c) + '</td>').join('') + '</tr>').join('')
+        + '</tbody></table>');
+      continue;
+    }
+    // 分隔线 --- *** ___
+    if (/^\s*([-*_])\s*(?:\1\s*){2,}$/.test(ln)) { out.push('<hr>'); continue; }
     if (/^\s*[-*]\s+/.test(ln)) { out.push('<li>' + inlineMd(ln.replace(/^\s*[-*]\s+/, '')) + '</li>'); continue; }
     if (/^\s*\d+\.\s+/.test(ln)) { out.push('<li>' + inlineMd(ln.replace(/^\s*\d+\.\s+/, '')) + '</li>'); continue; }
     out.push(inlineMd(ln));
