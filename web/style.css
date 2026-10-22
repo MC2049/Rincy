@@ -249,6 +249,9 @@ body {
 .tl-time { color: var(--label-tertiary); margin-right: 8px; }
 
 dialog {
+  /* <dialog> 的 UA 默认底是白的：浅色主题碰巧看不出，午夜等深色主题下
+     就是"白底白字"。必须显式盖掉。 */
+  background: var(--bg-base);
   border: 1px solid var(--border-medium); border-radius: var(--radius-panel);
   padding: 18px; max-width: 420px; width: 88%;
   /* 高度也锁死：最多占视口 88%，超出在框内滚，不顶出屏幕、不带动背景 */

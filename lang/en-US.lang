@@ -230,3 +230,5 @@ enginedlg.parser_ddg = Parser: DuckDuckGo
 enginedlg.ua_ph = Browser UA (blank = built-in default)
 enginedlg.need_url = The search URL must contain %s
 common.confirm_delete_engine = Delete this search engine?
+theme.preset.warmgray = Rin WarmGray
+theme.swatch.warmgray = W

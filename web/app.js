@@ -558,7 +558,7 @@ function bindAgentModel() {
 // ---------- 全局设置（主题色 + 模型库） ----------
 const THEME_PRESETS = {
   default: '#6366f1', ocean: '#0ea5e9', forest: '#10b981',
-  sunset: '#f59e0b', rose: '#ec4899',
+  sunset: '#f59e0b', rose: '#ec4899', warmgray: '#544e4d',
 };
 
 function applyTheme(theme) {

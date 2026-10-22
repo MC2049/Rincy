@@ -230,3 +230,5 @@ enginedlg.parser_ddg = 解析方式：DuckDuckGo
 enginedlg.ua_ph = 浏览器 UA（留空用内置默认）
 enginedlg.need_url = 搜索地址必须包含 %s 占位符
 common.confirm_delete_engine = 删除这个搜索引擎？
+theme.preset.warmgray = Rin WarmGray（暖灰）
+theme.swatch.warmgray = 灰
