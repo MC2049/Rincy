@@ -667,6 +667,7 @@ function renderSettingsDialog() {
 function renderThemeUI() {
   const t = (state.settings && state.settings.theme) || {};
   $$('#theme-row .swatch').forEach((sw) => {
+    sw.style.background = sw.dataset.color || 'var(--label-tertiary)'; // 老bug：data-color 从没人消费，色板一直透明
     sw.classList.toggle('active', t.mode === 'preset' && sw.dataset.preset === t.preset);
   });
   $('#theme-custom-chec').checked = t.mode === 'custom';
@@ -922,6 +923,7 @@ function openSettingsDialog() {
 function bindSettingsDialog() {
   // 主题：预置色板
   $$('#theme-row .swatch').forEach((sw) => {
+    sw.style.background = sw.dataset.color || 'var(--label-tertiary)';
     sw.addEventListener('click', () => saveTheme({ mode: 'preset', preset: sw.dataset.preset, accent: '' }));
   });
   // 主题：自定义主色开关

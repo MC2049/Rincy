@@ -406,7 +406,7 @@ function sanitizeSearch(raw) {
 
 function defaultSettings() {
   return {
-    theme: { mode: 'preset', preset: 'default', accent: '', css_name: '' },
+    theme: { mode: 'preset', preset: 'warmgray', accent: '', css_name: '' },
     language: 'zh-CN',
     models: [], // 不再预置占位模型：模型库从空白开始，用户自己加
     search: defaultSearch(), // 联网搜索的引擎库（预置必应/百度/DuckDuckGo，可增删改）
@@ -418,7 +418,13 @@ function migrateSettings(raw) {
   const d = defaultSettings();
   const s = { theme: d.theme, language: d.language, models: [...d.models], search: d.search };
   if (!raw) return s;
-  if (raw.theme && typeof raw.theme === 'object') s.theme = { ...s.theme, ...raw.theme };
+  if (raw.theme && typeof raw.theme === 'object') {
+    s.theme = { ...s.theme, ...raw.theme };
+    // 1.4.6 起默认主题色改为 warmgray；把从未动过的旧默认（preset=default 且无自定义色）
+    // 一并迁过去。明确选过紫的用户会带 accent/mode 痕迹吗——选紫也是 preset=default，
+    // 无法区分，就一并迁（想要紫再点一次即可）。
+    if (s.theme.mode === 'preset' && s.theme.preset === 'default' && !s.theme.accent) s.theme.preset = 'warmgray';
+  }
   if (raw.language) s.language = String(raw.language);
   if (raw.search && typeof raw.search === 'object') s.search = sanitizeSearch(raw.search);
   // 内置占位模型（云端默认/本地默认）没填过任何东西就顺手清掉——它们只会碍事
