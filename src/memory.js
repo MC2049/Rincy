@@ -123,6 +123,60 @@ function popUserAndAfter(agentDir) {
   }
 }
 
+// ①½ 中期记忆的模型真摘要（孟婆毕业版，毕业它自己注释里"后续接模型摘要"的 TODO）：
+//   - 覆盖进度存 mid-summary.json（covered = 已摘要的中期条数，lastTs = 最后一条的时间戳）
+//   - 每凑满 BATCH 条新中期对话才滚动融合一次（平时不花模型钱；回复永不等待它）
+//   - 失败静默：rebuildMemory 拿不到缓存就退回 60 字截短
+const MID_BATCH = 6;
+function midSummaryFile(agentDir) { return path.join(agentDir, 'mid-summary.json'); }
+function readMidSummary(agentDir) {
+  try { return JSON.parse(fs.readFileSync(midSummaryFile(agentDir), 'utf8')); }
+  catch { return null; }
+}
+async function updateMidSummary(agentDir, meta, modelConf, adapter) {
+  try {
+    if (!modelConf || !adapter) return;
+    if (meta?.memory_warden?.enabled !== true) return;
+    const speed = meta?.memory_warden?.speed || 'standard';
+    if (!Number.isFinite(SPEED_MID_FACTOR[speed])) return; // 不遗忘：没有中期层
+    const recentCount = Math.max(1, Number(meta?.params?.context_recent_count) || 10);
+    const entries = parseHistory(readHistory(agentDir));
+    const older = entries.slice(0, Math.max(0, entries.length - recentCount));
+    const midCount = Math.min(older.length, recentCount * (SPEED_MID_FACTOR[speed] ?? 2));
+    const mid = older.slice(-midCount); // 与 rebuildMemory 的中期定义严格一致：older 的末尾 midCount 条
+    if (!mid.length) return;
+    let cache = readMidSummary(agentDir) || { covered: 0, lastTs: '', text: '' };
+    let covered = cache.covered || 0;
+    // 历史被清空/重生成/分叉过（时间戳对不上）→ 进度作废，从头再来
+    if (covered > 0 && (covered > mid.length || (mid[covered - 1] || {}).ts !== cache.lastTs)) {
+      covered = 0; cache = { covered: 0, lastTs: '', text: '' };
+    }
+    if (covered >= mid.length) return;                 // 没有新的中期对话
+    if (covered > 0 && mid.length - covered < MID_BATCH) return; // 攒批：不足一批先不动，省模型钱
+    const batch = mid.slice(covered);
+    const body = batch.map((e) => `[${e.ts}] ${e.who}：${clip(e.text, 400)}`).join('\n').slice(0, 6000);
+    const prev = cache.text ? `既有摘要：\n${clip(cache.text, 800)}\n\n` : '';
+    const prompt = `${prev}以下是更早的中期对话。请把它们融合成一份更新的要点摘要：保留事实、决定、人名、数字和未完成的事，去掉寒暄；直接输出摘要正文，不要客套。\n\n${body}`;
+    const res = await adapter.chatStream({
+      modelConf,
+      messages: [{ role: 'user', content: prompt }],
+      params: { temperature: 0.3 },
+      think: false,
+      onDelta: () => {},
+    });
+    const text = String(res || '').trim();
+    if (!text) return;
+    fs.mkdirSync(agentDir, { recursive: true });
+    fs.writeFileSync(midSummaryFile(agentDir), JSON.stringify({
+      covered: mid.length,
+      lastTs: mid[mid.length - 1].ts,
+      text: clip(cache.text ? cache.text + '\n' + text : text, 1600),
+    }, null, 2), 'utf8');
+  } catch (e) {
+    console.error('[memory] 中期摘要生成失败（静默降级）：', e.message);
+  }
+}
+
 // ② 分层记忆重建（孟婆的核心）：
 //    近期记忆 = 最近 N 条完整带时间戳的对话（N = params.context_recent_count）
 //    中期记忆 = 再往前 M 条，压缩成摘要（M = N × 遗忘速度倍数；骨架版：截短，后续接模型摘要）
@@ -156,8 +210,16 @@ function rebuildMemory(agentDir, meta) {
   lines.push('');
 
   lines.push('## 中期记忆（压缩摘要）');
-  if (!mid.length) lines.push('（暂无）');
-  for (const e of mid) lines.push(`- ${e.who}说过：${clip(e.text, 60)}…`);
+  if (!mid.length) {
+    lines.push('（暂无）');
+  } else {
+    // 模型真摘要优先（孟婆毕业版：updateMidSummary 异步生成，这里只读缓存）；
+    // 摘要没赶上生成的部分，退回机械截短兜底。
+    const cache = readMidSummary(agentDir);
+    const useUpTo = cache && cache.covered > 0 ? Math.min(cache.covered, mid.length) : 0;
+    if (useUpTo > 0 && cache.text) lines.push(clip(cache.text, 1200));
+    for (const e of mid.slice(useUpTo)) lines.push(`- ${e.who}说过：${clip(e.text, 60)}…`);
+  }
   lines.push('');
 
   lines.push('## 远期记忆（要点关键词）');
@@ -253,4 +315,4 @@ function variantMeta(agentDir) {
   return out;
 }
 
-module.exports = { appendHistory, readHistory, parseHistory, writeHistory, lastUserText, popLastAI, popUserAndAfter, rebuildMemory, readMemory, clearHistory, loadVariants, saveVariants, syncVariant, replaceEntryByAIIndex, variantMeta };
+module.exports = { appendHistory, readHistory, parseHistory, writeHistory, lastUserText, popLastAI, popUserAndAfter, rebuildMemory, readMemory, clearHistory, loadVariants, saveVariants, syncVariant, replaceEntryByAIIndex, variantMeta, updateMidSummary, readMidSummary };

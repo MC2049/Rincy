@@ -421,6 +421,13 @@ dialog textarea { resize: vertical; }
 /* ---------- 全局设置对话框 ---------- */
 dialog.wide-dialog { max-width: 480px; width: 92%; }
 .sett-section { margin-top: 14px; }
+.sett-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.sett-tab {
+  flex: 1; height: 32px; border: 1px solid var(--border-medium); border-radius: 999px;
+  background: transparent; color: var(--label-secondary); font-size: var(--font-small);
+  cursor: pointer; padding: 0 10px;
+}
+.sett-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 .sett-title { font-weight: 600; margin-bottom: 8px; }
 .theme-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .swatch {

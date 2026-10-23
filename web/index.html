@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>Rincy</title>
-<link rel="stylesheet" href="/style.css?v=1.4.6">
+<link rel="stylesheet" href="/style.css?v=1.5.0">
 </head>
 <body>
 <div class="app" id="app">
@@ -130,7 +130,7 @@
             </div>
           </div>
           <button class="pill-btn ghost" id="btn-clear-memory" data-i18n="mem.clear">清除记忆</button>
-          <label class="switch-row"><input type="checkbox" id="sw-mengpo"> <span data-i18n="memory.warden">开启孟婆系统</span></label>
+          <label class="switch-row"><input type="checkbox" id="sw-mengpo"> <span data-i18n="memory.warden">开启记忆优化</span></label>
           <div class="speed-row" id="speed-row" hidden>
             <span data-i18n="memory.speed">遗忘速度</span>
             <select id="sel-speed">
@@ -298,7 +298,12 @@
 <!-- 全局设置：主题色 + 语言 + CSS 主题 + 模型库 -->
 <dialog id="settings-dialog" class="wide-dialog">
   <h3 data-i18n="settings.title">设置</h3>
-  <div class="sett-section">
+  <div class="sett-tabs" id="sett-tabs">
+    <button class="sett-tab active" data-zone="theme" data-i18n="settings.tab.theme">主题</button>
+    <button class="sett-tab" data-zone="models" data-i18n="settings.tab.models">模型</button>
+    <button class="sett-tab" data-zone="network" data-i18n="settings.tab.network">网络</button>
+  </div>
+  <div class="sett-section" data-zone="theme">
     <div class="sett-title" data-i18n="settings.theme">主题色</div>
     <div class="theme-row" id="theme-row">
       <button class="swatch" data-preset="default" data-color="#6366f1" title="默认紫" data-i18n="theme.swatch.default" data-i18n-title="theme.preset.default">紫</button>
@@ -306,13 +311,13 @@
       <button class="swatch" data-preset="forest" data-color="#10b981" title="森林绿" data-i18n="theme.swatch.forest" data-i18n-title="theme.preset.forest">绿</button>
       <button class="swatch" data-preset="sunset" data-color="#f59e0b" title="落日橙" data-i18n="theme.swatch.sunset" data-i18n-title="theme.preset.sunset">橙</button>
       <button class="swatch" data-preset="rose" data-color="#ec4899" title="玫瑰粉" data-i18n="theme.swatch.rose" data-i18n-title="theme.preset.rose">粉</button>
-      <button class="swatch" data-preset="warmgray" data-color="#544e4d" title="Rin WarmGray" data-i18n="theme.swatch.warmgray" data-i18n-title="theme.preset.warmgray">灰</button>
+      <button class="swatch" data-preset="warmgray" data-color="#544d4c" title="Rin WarmGray" data-i18n="theme.swatch.warmgray" data-i18n-title="theme.preset.warmgray">灰</button>
     </div>
     <label class="switch-row"><input type="checkbox" id="theme-custom-chec"> <span data-i18n="theme.custom">自定义主色</span></label>
-    <input type="color" class="theme-custom-input" id="theme-custom-input" value="#544e4d">
+    <input type="color" class="theme-custom-input" id="theme-custom-input" value="#544d4c">
     <span class="saved-hint" id="theme-saved"></span>
   </div>
-  <div class="sett-section">
+  <div class="sett-section" data-zone="theme">
     <div class="sett-title" data-i18n="settings.language">语言 / Language</div>
     <select class="pill-select" id="sel-lang"></select>
     <div style="margin-top:8px;">
@@ -320,7 +325,7 @@
     </div>
     <input type="file" id="import-lang-file" accept=".lang,text/plain" style="display:none;">
   </div>
-  <div class="sett-section">
+  <div class="sett-section" data-zone="theme">
     <div class="sett-title" data-i18n="settings.css_theme">CSS 主题</div>
     <select class="pill-select" id="sel-css-theme"></select>
     <div style="margin-top:8px;">
@@ -328,7 +333,7 @@
     </div>
     <input type="file" id="import-theme-file" accept=".css,text/css" style="display:none;">
   </div>
-  <div class="sett-section">
+  <div class="sett-section" data-zone="models">
     <div class="sett-title" data-i18n="settings.models">模型库</div>
     <div id="model-list"></div>
     <button class="pill-btn" id="btn-add-model" data-i18n="settings.add_model">＋ 添加模型</button>
@@ -337,7 +342,7 @@
       <button class="pill-btn small ghost" id="btn-import-agents" data-i18n="settings.import_agents">导入智能体</button>
     </div>
   </div>
-  <div class="sett-section">
+  <div class="sett-section" data-zone="network">
     <div class="sett-title" data-i18n="settings.search_header">搜索引擎（联网搜索用哪个）</div>
     <div id="engine-list"></div>
     <button class="pill-btn" id="btn-add-engine" data-i18n="settings.add_engine">＋ 添加搜索引擎</button>
@@ -405,6 +410,6 @@ setTimeout(function () {
   if (miss.length) window.__bootErr('浏览器内核缺少能力：' + miss.join(', ') + '。WebView 版本过旧，请更新「系统 WebView」或系统。');
 }, 300);
 </script>
-<script src="/app.js?v=1.4.6"></script>
+<script src="/app.js?v=1.5.0"></script>
 </body>
 </html>

@@ -558,7 +558,7 @@ function bindAgentModel() {
 // ---------- 全局设置（主题色 + 模型库） ----------
 const THEME_PRESETS = {
   default: '#6366f1', ocean: '#0ea5e9', forest: '#10b981',
-  sunset: '#f59e0b', rose: '#ec4899', warmgray: '#544e4d',
+  sunset: '#f59e0b', rose: '#ec4899', warmgray: '#544d4c',
 };
 
 function applyTheme(theme) {
@@ -917,7 +917,16 @@ async function loadSettings() {
 function openSettingsDialog() {
   renderSettingsDialog();
   renderEngineList();
+  showSettingsZone('theme'); // 每次打开回到「主题」分区
   $('#settings-dialog').showModal();
+}
+
+// 设置页分区：主题 / 模型 / 网络
+function showSettingsZone(zone) {
+  $$('#sett-tabs .sett-tab').forEach((b) => b.classList.toggle('active', b.dataset.zone === zone));
+  $$('#settings-dialog .sett-section[data-zone]').forEach((sec) => {
+    sec.hidden = sec.dataset.zone !== zone;
+  });
 }
 
 function bindSettingsDialog() {
@@ -1503,6 +1512,8 @@ async function init() {
   bindSettingsDialog();
   bindAddModelDialog();
   bindEngineDialog();
+  // 设置页分区切换
+  $$('#sett-tabs .sett-tab').forEach((b) => b.addEventListener('click', () => showSettingsZone(b.dataset.zone)));
   bindLangAndCssTheme();
   applyTheme((state.settings && state.settings.theme));
   await applyCssTheme(((state.settings && state.settings.theme && state.settings.theme.css_name) || ''));

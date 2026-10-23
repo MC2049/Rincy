@@ -59,14 +59,14 @@ catch.add = Add
 catch.delete_title = Delete
 
 # ---- Memory ----
-memory.warden = Memory warden
+memory.warden = Memory optimizer
 memory.speed = Forgetting speed
 memory.speed.never = Never forget
 memory.speed.slow = Slow
 memory.speed.standard = Standard
 memory.speed.fast = Fast
-memory.warden.on = Memory warden enabled
-memory.warden.off = Memory warden disabled
+memory.warden.on = Memory optimizer enabled
+memory.warden.off = Memory optimizer disabled
 memory.speed_set = Forgetting speed set to "{word}"
 
 # ---- Behavior ----
@@ -232,3 +232,6 @@ enginedlg.need_url = The search URL must contain %s
 common.confirm_delete_engine = Delete this search engine?
 theme.preset.warmgray = Rin WarmGray
 theme.swatch.warmgray = W
+settings.tab.theme = Theme
+settings.tab.models = Models
+settings.tab.network = Network

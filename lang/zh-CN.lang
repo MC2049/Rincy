@@ -59,14 +59,14 @@ catch.add = 添加
 catch.delete_title = 删除
 
 # ---- 记忆 ----
-memory.warden = 开启孟婆系统
+memory.warden = 开启记忆优化
 memory.speed = 遗忘速度
 memory.speed.never = 不遗忘
 memory.speed.slow = 较慢
 memory.speed.standard = 标准
 memory.speed.fast = 较快
-memory.warden.on = 开启了孟婆系统
-memory.warden.off = 关闭了孟婆系统
+memory.warden.on = 开启了记忆优化
+memory.warden.off = 关闭了记忆优化
 memory.speed_set = 遗忘速度调到「{word}」
 
 # ---- 行为 ----
@@ -232,3 +232,6 @@ enginedlg.need_url = 搜索地址必须包含 %s 占位符
 common.confirm_delete_engine = 删除这个搜索引擎？
 theme.preset.warmgray = Rin WarmGray（暖灰）
 theme.swatch.warmgray = 灰
+settings.tab.theme = 主题
+settings.tab.models = 模型
+settings.tab.network = 网络

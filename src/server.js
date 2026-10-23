@@ -191,6 +191,14 @@ async function handleChat(req, res) {
   const searchEngine = webOn ? websearch.activeEngine(config.readSettings()) : null;
   const MAX_SEARCH_ROUNDS = 2; // 一次回答最多搜两轮，防失控
 
+  // SSE 心跳：每 15 秒发一行注释，防 WebView/代理把安静的长连接掐掉
+  //（前端只解析 data: 开头的行，注释行天然无害）
+  const heartbeat = setInterval(() => {
+    try { if (!res.destroyed && !res.writableEnded) res.write(': ping\n\n'); } catch { /* 断了就算了 */ }
+  }, 15000);
+  const stopHeartbeat = () => clearInterval(heartbeat);
+  res.on('close', stopHeartbeat);
+
   let full = '', thoughtText = '';
   let applied = []; // 元灵写回结果（循环外声明：done 事件要用）
   const extraMsgs = []; // 搜索轮的回填消息（assistant 原文 + user 搜索结果），逐轮累积
@@ -205,7 +213,7 @@ async function handleChat(req, res) {
       roundMessages.push(...extraMsgs);
 
       let roundFull = '';
-      roundFull = await adapter.chatStream({
+      roundFull = await chatResilient({
         modelConf,
         messages: roundMessages,
         params,
@@ -213,7 +221,7 @@ async function handleChat(req, res) {
         signal: upstreamAbort.signal,
         onDelta: (d) => send('delta', { text: d }),
         onThought: (t) => { thoughtText += t; send('thought', { text: t }); },
-      });
+      }, note);
 
       // 元灵：回复里的 ```metasoul 写回块在此落盘；用户只看到块外的正文（每轮都处理）
       applied = [];
@@ -276,9 +284,53 @@ async function handleChat(req, res) {
     // 失败不吞消息：人话报错发到流里，聊天框照常显示
     send('error', { message: e.message || '出了点问题，稍后再试' });
   }
+  stopHeartbeat();
   // 无论成败都重建 memory.md——存档是最新的，分层记忆跟着走
   memory.rebuildMemory(dir, meta);
   res.end();
+  // 孟婆中期摘要（异步毕业版）：回复已经发出去了，模型悄悄补摘要，下一轮受益。
+  // 失败静默（机械截短兜底），绝不阻塞、绝不报错给用户。
+  if (meta.memory_warden && meta.memory_warden.enabled === true) {
+    memory.updateMidSummary(dir, meta, modelConf, adapter).catch(() => {});
+  }
+}
+
+// ---- 模型请求韧性（借 OpenClaw：transient recovery + model failover）----
+// 原则：瞬时失败（限流/5xx/网络抖动）有限重试；当前模型彻底失败→本轮换备用模型，
+// 不改智能体绑定；用户主动中断（signal.aborted）绝不重试。
+function briefErr(e) { return String((e && e.message) || e).slice(0, 80); }
+function isTransientModelErr(e) {
+  const m = String((e && e.message) || e);
+  const st = (m.match(/HTTP (\d{3})/) || [])[1];
+  if (st && ['401', '403', '404'].includes(st)) return false; // 鉴权/配置错：重试无意义
+  if (/没选好模型|请求格式不对/.test(m)) return false;
+  if (st) return true;                                        // 其余 HTTP 状态（429/5xx/402/408…）都值得一试
+  return /fetch failed|network|ECONN|ETIMEDOUT|socket|timeout|超时|失败|错误|error/i.test(m);
+}
+async function chatResilient(opts, note) {
+  const library = (config.readSettings().models || []).filter((m) => m.baseUrl && m.model);
+  const candidates = [opts.modelConf, ...library.filter((m) => m.id !== opts.modelConf.id).slice(0, 2)];
+  let lastErr = null;
+  for (let ci = 0; ci < candidates.length; ci++) {
+    const conf = candidates[ci];
+    if (ci > 0) note('\n↪️ 本轮改用备用模型「' + (conf.name || conf.model) + '」…');
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        return await adapter.chatStream({ ...opts, modelConf: conf });
+      } catch (e) {
+        lastErr = e;
+        if (opts.signal && opts.signal.aborted) throw e; // 用户点了停止：立即退出
+        if (!isTransientModelErr(e)) throw e;            // 没救的错：直接抛
+        if (attempt < 3) {
+          const wait = attempt * 1000 + 500;
+          note('\n⏳ ' + briefErr(e) + '，' + Math.round(wait / 1000) + ' 秒后重试（' + (attempt + 1) + '/3）…');
+          await new Promise((r) => setTimeout(r, wait));
+        }
+      }
+    }
+    if (ci < candidates.length - 1) note('\n✖ 模型「' + (conf.name || conf.model) + '」连续三次失败：' + briefErr(lastErr));
+  }
+  throw lastErr;
 }
 
 // 路由
