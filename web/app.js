@@ -602,11 +602,11 @@ const DEFAULT_SET = 'rin-warmgray-light';
 const LEGACY_ACCENTS = { default: '#6366f1', ocean: '#0ea5e9', forest: '#10b981', sunset: '#f59e0b', rose: '#ec4899', warmgray: '#544d4c' };
 
 function applyTheme(theme) {
-  const t = theme || {};
-  const set = COLOR_SETS[t.set] || COLOR_SETS[DEFAULT_SET];
+  const th = theme || {};
+  const set = COLOR_SETS[th.set] || COLOR_SETS[DEFAULT_SET];
   const vars = { ...set.vars };
   // 自定义主色：只覆盖 accent，其余颜色仍来自颜色集
-  if (t.accent) vars['--accent'] = t.accent;
+  if (th.accent) vars['--accent'] = th.accent;
   for (const k of Object.keys(vars)) document.documentElement.style.setProperty(k, vars[k]);
 }
 
@@ -708,14 +708,15 @@ function renderSettingsDialog() {
 }
 
 function renderThemeUI() {
-  const t = (state.settings && state.settings.theme) || {};
+  // 局部变量叫 th，绝不叫 t——全局 t() 是翻译函数，遮蔽它就是 't is not a function'
+  const th = (state.settings && state.settings.theme) || {};
   // 颜色集卡片：色块预览 = 该集的面板色+主色双色球
   const row = $('#cset-row');
   row.innerHTML = '';
   for (const id of Object.keys(COLOR_SETS)) {
     const cs = COLOR_SETS[id];
     const card = document.createElement('button');
-    card.className = 'cset-card' + (t.set === id ? ' active' : '');
+    card.className = 'cset-card' + (th.set === id ? ' active' : '');
     const ball = document.createElement('span');
     ball.className = 'cset-ball';
     ball.style.background = 'linear-gradient(135deg, ' + cs.vars['--bg-base'] + ' 49%, ' + cs.vars['--accent'] + ' 51%)';
@@ -727,9 +728,9 @@ function renderThemeUI() {
     card.addEventListener('click', () => saveTheme({ set: id }));
     row.append(card);
   }
-  const custom = !!(t.accent);
+  const custom = !!(th.accent);
   $('#theme-custom-chec').checked = custom;
-  $('#theme-custom-input').value = t.accent || COLOR_SETS[t.set || DEFAULT_SET].vars['--accent'];
+  $('#theme-custom-input').value = th.accent || COLOR_SETS[th.set || DEFAULT_SET].vars['--accent'];
 }
 
 function saveTheme(patch) {
