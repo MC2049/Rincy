@@ -422,6 +422,16 @@ dialog textarea { resize: vertical; }
 dialog.wide-dialog { max-width: 480px; width: 92%; }
 .sett-section { margin-top: 14px; }
 .sett-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.cset-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 8px; }
+.cset-card {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border: 1px solid var(--border-medium); border-radius: var(--radius-panel);
+  background: transparent; color: var(--label-primary);
+  cursor: pointer; font-size: var(--font-small); text-align: left;
+}
+.cset-card.active { border-color: var(--accent); background: var(--bg-panel); }
+.cset-ball { width: 22px; height: 22px; border-radius: 999px; border: 1px solid; flex: 0 0 auto; }
+.cset-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sett-tab {
   flex: 1; height: 32px; border: 1px solid var(--border-medium); border-radius: 999px;
   background: transparent; color: var(--label-secondary); font-size: var(--font-small);

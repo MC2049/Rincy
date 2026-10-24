@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>Rincy</title>
-<link rel="stylesheet" href="/style.css?v=1.5.1">
+<link rel="stylesheet" href="/style.css?v=1.6.0">
 </head>
 <body>
 <div class="app" id="app">
@@ -299,25 +299,20 @@
 <dialog id="settings-dialog" class="wide-dialog">
   <h3 data-i18n="settings.title">设置</h3>
   <div class="sett-tabs" id="sett-tabs">
-    <button class="sett-tab active" data-zone="theme" data-i18n="settings.tab.theme">主题</button>
+    <button class="sett-tab active" data-zone="general" data-i18n="settings.tab.general">通用</button>
+    <button class="sett-tab" data-zone="theme" data-i18n="settings.tab.theme">主题</button>
     <button class="sett-tab" data-zone="models" data-i18n="settings.tab.models">模型</button>
     <button class="sett-tab" data-zone="network" data-i18n="settings.tab.network">网络</button>
   </div>
   <div class="sett-section" data-zone="theme">
-    <div class="sett-title" data-i18n="settings.theme">主题色</div>
-    <div class="theme-row" id="theme-row">
-      <button class="swatch" data-preset="default" data-color="#6366f1" title="默认紫" data-i18n="theme.swatch.default" data-i18n-title="theme.preset.default">紫</button>
-      <button class="swatch" data-preset="ocean" data-color="#0ea5e9" title="海蓝" data-i18n="theme.swatch.ocean" data-i18n-title="theme.preset.ocean">海</button>
-      <button class="swatch" data-preset="forest" data-color="#10b981" title="森林绿" data-i18n="theme.swatch.forest" data-i18n-title="theme.preset.forest">绿</button>
-      <button class="swatch" data-preset="sunset" data-color="#f59e0b" title="落日橙" data-i18n="theme.swatch.sunset" data-i18n-title="theme.preset.sunset">橙</button>
-      <button class="swatch" data-preset="rose" data-color="#ec4899" title="玫瑰粉" data-i18n="theme.swatch.rose" data-i18n-title="theme.preset.rose">粉</button>
-      <button class="swatch" data-preset="warmgray" data-color="#544d4c" title="Rin WarmGray" data-i18n="theme.swatch.warmgray" data-i18n-title="theme.preset.warmgray">灰</button>
-    </div>
+    <div class="sett-title" data-i18n="settings.color_set">颜色集</div>
+    <div class="cset-row" id="cset-row"></div>
+    <div class="field-tip" data-i18n="settings.color_set_tip">颜色集决定背景、文本、边框、主色等全部颜色；下方 CSS 主题负责框样式与布局，两者叠加生效。</div>
     <label class="switch-row"><input type="checkbox" id="theme-custom-chec"> <span data-i18n="theme.custom">自定义主色</span></label>
     <input type="color" class="theme-custom-input" id="theme-custom-input" value="#544d4c">
     <span class="saved-hint" id="theme-saved"></span>
   </div>
-  <div class="sett-section" data-zone="theme">
+  <div class="sett-section" data-zone="general">
     <div class="sett-title" data-i18n="settings.language">语言 / Language</div>
     <select class="pill-select" id="sel-lang"></select>
     <div style="margin-top:8px;">
@@ -327,6 +322,7 @@
   </div>
   <div class="sett-section" data-zone="theme">
     <div class="sett-title" data-i18n="settings.css_theme">CSS 主题</div>
+    <div class="field-tip" data-i18n="settings.css_theme_tip">CSS 是强大的语言：布局、字体、圆角、间距、动画、毛玻璃都行——内置 compact / serif 两个示范就是证明；8 个核心颜色变量归颜色集，其余随便改。</div>
     <select class="pill-select" id="sel-css-theme"></select>
     <div style="margin-top:8px;">
       <button class="pill-btn small ghost" id="btn-import-theme" data-i18n="settings.import_theme">导入 .css 主题</button>
@@ -410,6 +406,6 @@ setTimeout(function () {
   if (miss.length) window.__bootErr('浏览器内核缺少能力：' + miss.join(', ') + '。WebView 版本过旧，请更新「系统 WebView」或系统。');
 }, 300);
 </script>
-<script src="/app.js?v=1.5.1"></script>
+<script src="/app.js?v=1.6.0"></script>
 </body>
 </html>

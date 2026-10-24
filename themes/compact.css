@@ -1,0 +1,18 @@
+/* compact.css —— 方角紧凑：CSS 主题的实力示范之一
+   CSS 主题管"形"：布局、圆角、间距、字体、动画都归它；颜色归颜色集。
+   本主题把整个界面收紧：直角、密排、气泡加宽，适合小屏高密度使用。 */
+:root {
+  --radius-bubble: 6px;
+  --radius-button: 4px;
+  --radius-panel: 4px;
+  --radius-small: 2px;
+  --font-base: clamp(13px, 0.9vw, 15px);
+  --line-base: clamp(20px, 1.5vw, 24px);
+  --font-small: clamp(11px, 0.8vw, 13px);
+  --line-small: clamp(16px, 1.2vw, 19px);
+}
+.bubble { max-width: 88%; padding: 6px 10px; }
+.chat { padding: 10px 12px; }
+.chat-messages { gap: 8px; }
+.sett-section { margin-bottom: 10px; }
+.pill-btn { height: 30px; }

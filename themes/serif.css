@@ -1,0 +1,15 @@
+/* serif.css —— 衬线文风：CSS 主题的实力示范之二
+   把正文字体换成衬线家族，行距放宽——读长回答像读书。
+   颜色不动（那是颜色集的事），只动"字"与"排版"。 */
+:root {
+  --font-base: Georgia, 'Songti SC', 'Noto Serif CJK SC', 'SimSun', serif;
+  --font-small: Georgia, 'Songti SC', 'Noto Serif CJK SC', serif;
+  --line-base: clamp(27px, 2.1vw, 33px);
+  --font-title: Georgia, 'Songti SC', 'Noto Serif CJK SC', serif;
+}
+.bubble.ai .text { letter-spacing: 0.2px; }
+.bubble.ai .text h1, .bubble.ai .text h2, .bubble.ai .text h3 {
+  font-family: Georgia, 'Songti SC', serif;
+  letter-spacing: 0.5px;
+}
+.bubble .text blockquote { font-style: italic; }

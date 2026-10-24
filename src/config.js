@@ -406,7 +406,7 @@ function sanitizeSearch(raw) {
 
 function defaultSettings() {
   return {
-    theme: { mode: 'preset', preset: 'warmgray', accent: '', css_name: '' },
+    theme: { set: 'rin-warmgray-light', accent: '', css_name: '' },
     language: 'zh-CN',
     models: [], // 不再预置占位模型：模型库从空白开始，用户自己加
     search: defaultSearch(), // 联网搜索的引擎库（预置必应/百度/DuckDuckGo，可增删改）
@@ -420,10 +420,22 @@ function migrateSettings(raw) {
   if (!raw) return s;
   if (raw.theme && typeof raw.theme === 'object') {
     s.theme = { ...s.theme, ...raw.theme };
-    // 1.4.6 起默认主题色改为 warmgray；把从未动过的旧默认（preset=default 且无自定义色）
-    // 一并迁过去。明确选过紫的用户会带 accent/mode 痕迹吗——选紫也是 preset=default，
-    // 无法区分，就一并迁（想要紫再点一次即可）。
-    if (s.theme.mode === 'preset' && s.theme.preset === 'default' && !s.theme.accent) s.theme.preset = 'warmgray';
+    // 1.6.0：主题色升级为颜色集（set）。旧结构迁移：
+    //   preset=default/warmgray → Rin WarmGray Light；ocean/forest/sunset/rose/自定义紫
+    //   等旧预设的颜色保留为"自定义主色"（accent），颜色集落在 Light。
+    //   曾用午夜/樱花 CSS 主题的 → 直接转成对应颜色集，css_name 清空。
+    const LEGACY = { default: '#6366f1', ocean: '#0ea5e9', forest: '#10b981', sunset: '#f59e0b', rose: '#ec4899', warmgray: '#544d4c' };
+    if (s.theme.css_name === 'midnight') { s.theme.set = 'midnight'; s.theme.css_name = ''; }
+    else if (s.theme.css_name === 'sakura') { s.theme.set = 'sakura'; s.theme.css_name = ''; }
+    else if (!s.theme.set) {
+      s.theme.set = 'rin-warmgray-light';
+      const legacyAccent = LEGACY[s.theme.preset];
+      if (s.theme.preset === 'custom' && s.theme.accent) { /* 保留自定义主色 */ }
+      else if (legacyAccent) s.theme.accent = legacyAccent;
+    }
+    delete s.theme.mode;
+    delete s.theme.preset;
+    if (s.theme.set !== 'rin-warmgray-light' && !s.theme.accent) { /* 颜色集自带主色 */ }
   }
   if (raw.language) s.language = String(raw.language);
   if (raw.search && typeof raw.search === 'object') s.search = sanitizeSearch(raw.search);

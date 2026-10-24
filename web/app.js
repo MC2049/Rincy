@@ -555,16 +555,59 @@ function bindAgentModel() {
   });
 }
 
-// ---------- 全局设置（主题色 + 模型库） ----------
-const THEME_PRESETS = {
-  default: '#6366f1', ocean: '#0ea5e9', forest: '#10b981',
-  sunset: '#f59e0b', rose: '#ec4899', warmgray: '#544d4c',
+// ---------- 颜色集（color set）：主题色的升级形态 ----------
+// 一个颜色集 = 一整束颜色变量（背景/面板/文本/边框/主色），相当于一个 class。
+// 每套必须给全 8 个核心变量——切换时整束覆盖，绝不残留上一套的颜色。
+// 午夜/樱花由此从 CSS 主题转正为内置颜色集；CSS 主题则退居框样式/布局层。
+const COLOR_SETS = {
+  'rin-warmgray-light': {
+    name: 'Rin WarmGray Light',
+    vars: {
+      '--bg-base': '#ffffff', '--bg-panel': '#f9fafb',
+      '--label-primary': '#0f1115', '--label-secondary': '#61666b', '--label-tertiary': '#81858c',
+      '--border-light': 'rgba(0,0,0,.06)', '--border-medium': 'rgba(0,0,0,.12)',
+      '--accent': '#544d4c',
+    },
+  },
+  'rin-warmgray-dark': {
+    name: 'Rin WarmGray Dark',
+    vars: {
+      '--bg-base': '#171614', '--bg-panel': '#201e1b',
+      '--label-primary': '#e8e4df', '--label-secondary': '#a39d95', '--label-tertiary': '#6f6a63',
+      '--border-light': 'rgba(255,255,255,.07)', '--border-medium': 'rgba(255,255,255,.14)',
+      '--accent': '#8a7f76',
+    },
+  },
+  'midnight': {
+    name: '午夜',
+    vars: {
+      '--bg-base': '#0b1020', '--bg-panel': '#131a2e',
+      '--label-primary': '#e6ebff', '--label-secondary': '#9aa7d0', '--label-tertiary': '#5f6c96',
+      '--border-light': '#232c47', '--border-medium': '#35406b',
+      '--accent': '#7c8cff',
+    },
+  },
+  'sakura': {
+    name: '樱花',
+    vars: {
+      '--bg-base': '#fff7f9', '--bg-panel': '#fdeef2',
+      '--label-primary': '#43302e', '--label-secondary': '#8c6f6d', '--label-tertiary': '#b39a98',
+      '--border-light': 'rgba(180,110,120,.14)', '--border-medium': 'rgba(180,110,120,.26)',
+      '--accent': '#e2698b',
+    },
+  },
 };
+const DEFAULT_SET = 'rin-warmgray-light';
+// 旧预设色板的颜色保留为"自定义主色"，迁移时不丢
+const LEGACY_ACCENTS = { default: '#6366f1', ocean: '#0ea5e9', forest: '#10b981', sunset: '#f59e0b', rose: '#ec4899', warmgray: '#544d4c' };
 
 function applyTheme(theme) {
-  const t = theme || { mode: 'preset', preset: 'default', accent: '' };
-  const accent = t.mode === 'custom' && t.accent ? t.accent : (THEME_PRESETS[t.preset] || THEME_PRESETS.default);
-  document.documentElement.style.setProperty('--accent', accent);
+  const t = theme || {};
+  const set = COLOR_SETS[t.set] || COLOR_SETS[DEFAULT_SET];
+  const vars = { ...set.vars };
+  // 自定义主色：只覆盖 accent，其余颜色仍来自颜色集
+  if (t.accent) vars['--accent'] = t.accent;
+  for (const k of Object.keys(vars)) document.documentElement.style.setProperty(k, vars[k]);
 }
 
 // ---------- CSS 主题（.css 导入，选择即时生效） ----------
@@ -666,12 +709,27 @@ function renderSettingsDialog() {
 
 function renderThemeUI() {
   const t = (state.settings && state.settings.theme) || {};
-  $$('#theme-row .swatch').forEach((sw) => {
-    sw.style.background = sw.dataset.color || 'var(--label-tertiary)'; // 老bug：data-color 从没人消费，色板一直透明
-    sw.classList.toggle('active', t.mode === 'preset' && sw.dataset.preset === t.preset);
-  });
-  $('#theme-custom-chec').checked = t.mode === 'custom';
-  $('#theme-custom-input').value = t.accent || (THEME_PRESETS[t.preset] || THEME_PRESETS.default);
+  // 颜色集卡片：色块预览 = 该集的面板色+主色双色球
+  const row = $('#cset-row');
+  row.innerHTML = '';
+  for (const id of Object.keys(COLOR_SETS)) {
+    const cs = COLOR_SETS[id];
+    const card = document.createElement('button');
+    card.className = 'cset-card' + (t.set === id ? ' active' : '');
+    const ball = document.createElement('span');
+    ball.className = 'cset-ball';
+    ball.style.background = 'linear-gradient(135deg, ' + cs.vars['--bg-base'] + ' 49%, ' + cs.vars['--accent'] + ' 51%)';
+    ball.style.borderColor = cs.vars['--border-medium'];
+    const label = document.createElement('span');
+    label.className = 'cset-name';
+    label.textContent = t('theme.set.' + id) || cs.name;
+    card.append(ball, label);
+    card.addEventListener('click', () => saveTheme({ set: id }));
+    row.append(card);
+  }
+  const custom = !!(t.accent);
+  $('#theme-custom-chec').checked = custom;
+  $('#theme-custom-input').value = t.accent || COLOR_SETS[t.set || DEFAULT_SET].vars['--accent'];
 }
 
 function saveTheme(patch) {
@@ -930,17 +988,12 @@ function showSettingsZone(zone) {
 }
 
 function bindSettingsDialog() {
-  // 主题：预置色板
-  $$('#theme-row .swatch').forEach((sw) => {
-    sw.style.background = sw.dataset.color || 'var(--label-tertiary)';
-    sw.addEventListener('click', () => saveTheme({ mode: 'preset', preset: sw.dataset.preset, accent: '' }));
-  });
-  // 主题：自定义主色开关
+  // 主题：自定义主色（只覆盖当前颜色集的 accent）
   $('#theme-custom-chec').addEventListener('change', () => {
     if ($('#theme-custom-chec').checked) {
-      saveTheme({ mode: 'custom', accent: $('#theme-custom-input').value });
+      saveTheme({ accent: $('#theme-custom-input').value });
     } else {
-      saveTheme({ mode: 'preset', accent: '' });
+      saveTheme({ accent: '' });
     }
   });
   $('#theme-custom-input').addEventListener('input', () => {
