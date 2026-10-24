@@ -1,0 +1,20 @@
+/* glass.css —— 毛玻璃材质：CSS 主题示范
+   材质与光效归 CSS 主题管：面板半透明 + 背景模糊 + 柔和投影。
+   颜色不变（那是颜色集的事），所以任意颜色集上都能叠出玻璃感。 */
+.menu,
+.chat-head,
+.sett-section,
+.dialog,
+.toast {
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+.menu { background: color-mix(in srgb, var(--bg-base) 72%, transparent); }
+.chat-head { background: color-mix(in srgb, var(--bg-base) 55%, transparent); }
+.bubble {
+  box-shadow: 0 2px 18px color-mix(in srgb, var(--accent) 12%, transparent);
+  backdrop-filter: blur(6px);
+}
+.bubble.me { box-shadow: 0 2px 22px color-mix(in srgb, var(--accent) 30%, transparent); }
+.pill-btn, .icon-btn { backdrop-filter: blur(8px); }
+.dialog { box-shadow: 0 18px 60px rgba(0,0,0,.25); }

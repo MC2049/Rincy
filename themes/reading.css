@@ -1,0 +1,19 @@
+/* reading.css —— 长文阅读排版：CSS 主题示范
+   排版归 CSS 主题：收窄正文列宽、放大行距、段间呼吸、
+   标题分级与两端对齐。适合让 AI 的长回答像一篇文章。 */
+.bubble.ai .text {
+  max-width: 62ch;
+  line-height: 2;
+  text-align: justify;
+}
+.bubble.ai .text p { margin: 0.9em 0; }
+.bubble.ai .text h1, .bubble.ai .text h2, .bubble.ai .text h3 {
+  letter-spacing: 0.02em;
+  margin: 1.6em 0 0.6em;
+}
+.bubble.ai .text ul, .bubble.ai .text ol { padding-left: 1.6em; margin: 0.8em 0; }
+.bubble.ai .text blockquote {
+  margin: 1.2em 0; padding-left: 1.2em;
+  border-left: 3px solid var(--accent);
+}
+.chat-messages { max-width: 780px; margin: 0 auto; width: 100%; }

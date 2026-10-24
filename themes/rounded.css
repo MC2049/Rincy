@@ -1,0 +1,15 @@
+/* rounded.css —— 大圆角泡泡：CSS 主题示范
+   与 compact 相反的取向：全界面圆润、宽松、呼吸感，
+   气泡几乎成胶囊，按钮与输入框跟着放大弧度。 */
+:root {
+  --radius-bubble: 26px;
+  --radius-button: 999px;
+  --radius-panel: 18px;
+  --radius-small: 12px;
+}
+.bubble { padding: 12px 18px; }
+.chat-messages { gap: 16px; }
+.chat-input { border-radius: 24px; }
+.avatar { border-radius: 999px; }
+.pill-btn { padding: 8px 18px; }
+.tag-chip { border-radius: 999px; }

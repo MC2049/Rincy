@@ -1,0 +1,20 @@
+/* terminal.css —— 终端风：CSS 主题示范
+   只管"形"与"字"：等宽字体、直角、无气泡圆角、字距与大小写强调。
+   配上任意深色颜色集（如 midnight）效果最正。 */
+:root {
+  --font-base: 'JetBrains Mono', 'Cascadia Mono', Consolas, 'Courier New', monospace;
+  --font-small: 'JetBrains Mono', Consolas, monospace;
+  --font-title: 'JetBrains Mono', Consolas, monospace;
+  --radius-bubble: 0px;
+  --radius-button: 0px;
+  --radius-panel: 0px;
+  --radius-small: 0px;
+}
+.bubble { border: 1px solid var(--border-medium); }
+.bubble.me { border-color: var(--accent); }
+.menu-head, .menu-title, .sett-title, .field-label { text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.85em; }
+.chat-title { letter-spacing: 0.08em; }
+.text code, .text pre, .fold-inner { font-family: inherit; }
+.tag-chip, .builtin-badge { text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.78em; }
+.chat-input { border-style: dashed; }
+.avatar { border-radius: 0; border: 1px solid var(--border-medium); }
