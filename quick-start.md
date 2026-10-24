@@ -174,3 +174,9 @@ Rincy 本身免费，但它需要连接一个"大脑"（模型）才能说话。
 ---
 
 *Rin Is Not Code Yet. 你不需要懂代码，就能拥有自己的智能体。*
+
+## 桌面版更新
+
+- 双击仓库根目录的 `update.bat`（Linux/macOS 用 `./update.sh`）：自动拉最新版并覆盖程序文件。优先 GitHub Releases，连不上会自动改走 Gitee 归档（国内可达）。
+- 只覆盖程序文件；你的 `data/` 数据和 `node_modules/` 依赖不会被碰。
+- 更新完重启 `start.bat` 生效。
